@@ -1,11 +1,31 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../../prisma.service';
+import { PrismaService } from '../../../utils/prisma.service';
 
 @Injectable()
 export class PermissionService {
     private readonly logger = new Logger(PermissionService.name);
 
     constructor(private readonly prisma: PrismaService) {}
+
+
+    async createPermissionsBulk(permissions: { action: string; description?: string }[]) {
+        try {
+            const createdPermissions = await this.prisma.permission.createMany({
+                data: permissions,
+                skipDuplicates: true, // Avoid duplicates if Prisma supports it
+            });
+
+            this.logger.log(`Permissions created successfully: ${createdPermissions.count} items`);
+            return {
+                message: 'Permissions created successfully',
+                data: createdPermissions,
+            };
+        } catch (error) {
+            this.logger.error('Failed to create permissions in bulk', error.stack);
+            throw error;
+        }
+    }
+
 
     async getAllPermissions() {
         try {

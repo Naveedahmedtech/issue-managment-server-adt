@@ -5,11 +5,12 @@ import {
     Put,
     Delete,
     Param,
-    Body,
+    Body, Res,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { Response } from 'express';
 
 @Controller({ path: 'user', version: '1' })
 export class UserController {
@@ -28,6 +29,12 @@ export class UserController {
     @Post()
     async createUser(@Body() body: any) {
         return await this.userService.createUser(body);
+    }
+
+    @Post('signin')
+    async login(@Body() body: any,
+                @Res({ passthrough: true }) res: Response) {
+        return await this.userService.signIn(body, res);
     }
 
     @Put(':id')
