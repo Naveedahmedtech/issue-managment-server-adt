@@ -5,12 +5,12 @@ import {
     Put,
     Delete,
     Param,
-    Body, Res,
+    Body, 
+    Res,
+     Query,
 } from '@nestjs/common';
-import { UserService } from './user.service';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
 import { Response } from 'express';
+import { UserService } from './user.service';
 
 @Controller({ path: 'user', version: '1' })
 export class UserController {
@@ -21,28 +21,33 @@ export class UserController {
         return await this.userService.getAllUsers();
     }
 
+    @Get('azure/login')
+    async loginWithAzuer() {
+        return await this.userService.azureLogin();
+    }
+
+    @Get('azure/redirect')
+    async handleAzureRedirect(@Query('code') code: string, @Res({ passthrough: true }) res: Response) {
+        return await this.userService.azureRedirect(code, res);
+        // return "HELLO WORLD";
+    }
+
     @Get(':id')
     async getUserById(@Param('id') id: string) {
         return await this.userService.getUserById(id);
     }
 
-    @Post()
+    @Post('azure')
     async createUser(@Body() body: any) {
         return await this.userService.createUser(body);
     }
 
-    @Post('signin')
-    async login(@Body() body: any,
-                @Res({ passthrough: true }) res: Response) {
-        return await this.userService.signIn(body, res);
-    }
-
-    @Put(':id')
-    async updateUser(@Param('id') id: string, @Body() body: UpdateUserDto) {
+    @Put('azure/:id')
+    async updateUser(@Param('id') id: string, @Body() body: any) {
         return await this.userService.updateUser(id, body);
     }
 
-    @Delete(':id')
+    @Delete('azure/:id')
     async deleteUser(@Param('id') id: string) {
         return await this.userService.deleteUser(id);
     }

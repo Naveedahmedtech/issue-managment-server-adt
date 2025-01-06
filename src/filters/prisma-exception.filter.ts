@@ -16,7 +16,7 @@ export class PrismaExceptionFilter implements ExceptionFilter {
         const response = ctx.getResponse();
         const request = ctx.getRequest();
 
-        let status = HttpStatus.INTERNAL_SERVER_ERROR;
+        let status = exception?.status || HttpStatus.INTERNAL_SERVER_ERROR;
         let message = 'Internal server error';
 
         // Handle Prisma errors
@@ -38,9 +38,8 @@ export class PrismaExceptionFilter implements ExceptionFilter {
             }
         } else {
             this.logger.error('Unexpected error occurred', exception);
-        }
+        } 
 
-        // Format error response
         response.status(status).json({
             status: 'error',
             message,
