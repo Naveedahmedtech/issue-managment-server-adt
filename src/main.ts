@@ -5,6 +5,8 @@ import {PrismaExceptionFilter} from "./filters/prisma-exception.filter";
 import {ResponseInterceptor} from "./interceptor/response.interceptor";
 import * as cookieParser from 'cookie-parser';
 import {createLogger} from "./utils/logger.util";
+import * as express from 'express';
+import { join } from 'path';
 
 
 async function bootstrap() {
@@ -18,7 +20,7 @@ async function bootstrap() {
   app.use(cookieParser());
   app.useGlobalFilters(new PrismaExceptionFilter());
   app.useGlobalInterceptors(new ResponseInterceptor());
-
+  app.use('/static', express.static(join(__dirname, '..', 'public')));
   app.setGlobalPrefix('api');
   app.enableVersioning({
     type: VersioningType.URI, // URI-based versioning
