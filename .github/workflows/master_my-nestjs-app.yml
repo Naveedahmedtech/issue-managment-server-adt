@@ -1,70 +1,34 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-
-name: Build and deploy Node.js app to Azure Web App - my-nestjs-app
+name: Build and Deploy to Azure
 
 on:
   push:
     branches:
-      - master
-  workflow_dispatch:
+      - main
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v4
+      # ✅ Step 1: Checkout the repository
+      - name: 'Checkout repository'
+        uses: actions/checkout@v3
 
-      - name: Set up Node.js version
+      # ✅ Step 2: Setup Node.js
+      - name: 'Setup Node.js'
         uses: actions/setup-node@v3
         with:
           node-version: '20.x'
+          cache: 'npm'
 
-      - name: npm install, build, and test
+      # ✅ Step 3: Install dependencies and build
+      - name: 'Install dependencies and build'
         run: |
           npm install --legacy-peer-deps
-          npm run build --if-present
+          npm run build
 
-      - name: Zip artifact for deployment
-        run: zip release.zip ./* -r
-
-      - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
-        with:
-          name: node-app
-          path: release.zip
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    environment:
-      name: 'Production'
-      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
-    permissions:
-      id-token: write #This is required for requesting the JWT
-
-    steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: node-app
-
-      - name: Unzip artifact for deployment
-        run: unzip release.zip
-      
-      - name: Login to Azure
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_158C5FC476A54AD29F95752A6A75E683 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_558C3177659C400AAAC0E27839CF7987 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_C940D23FAFD54C55AC845D16E21A0269 }}
-
+      # ✅ Step 4: Deploy to Azure Web App
       - name: 'Deploy to Azure Web App'
-        id: deploy-to-webapp
-        uses: azure/webapps-deploy@v3
+        uses: azure/webapps-deploy@v2
         with:
-          app-name: 'my-nestjs-app'
-          slot-name: 'Production'
-          package: .
-          
+          app-name: 'Nest-backend'
+          publish-profile: ${{ secrets.azureWebAppPublishProfile }}
