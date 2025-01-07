@@ -24,7 +24,7 @@ export class AuthGuard implements CanActivate {
 
             const payload = this.jwtService.verify(token);
             request['user'] = payload; // Attach the user info to the request object
-            
+
             const user = await this.prisma.user.findUnique({
                 where: { azureId: payload.sub },
                 include: {
@@ -46,7 +46,6 @@ export class AuthGuard implements CanActivate {
             }
 
             request['userDetails'] = user;
-
             // Validate roles and permissions
             const requiredAccess = this.reflector.get<{ roles: string[]; permissions: string[] }>(
                 'rolesAndPermissions',
