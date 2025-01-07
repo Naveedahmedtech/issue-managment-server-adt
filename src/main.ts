@@ -3,9 +3,9 @@ import { AppModule } from './app.module';
 import {ValidationPipe, VersioningType} from "@nestjs/common";
 import {PrismaExceptionFilter} from "./filters/prisma-exception.filter";
 import {ResponseInterceptor} from "./interceptor/response.interceptor";
-import * as cookieParser from 'cookie-parser';
+import cookieParser from 'cookie-parser';
 import {createLogger} from "./utils/logger.util";
-import * as express from 'express';
+import express from 'express';
 import { join } from 'path';
 
 
