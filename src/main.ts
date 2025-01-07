@@ -11,6 +11,10 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: createLogger(),
   });
+  app.enableCors({
+    origin: process.env.FRONTEND_URL, 
+    credentials: true, 
+});
   app.use(cookieParser());
   app.useGlobalFilters(new PrismaExceptionFilter());
   app.useGlobalInterceptors(new ResponseInterceptor());

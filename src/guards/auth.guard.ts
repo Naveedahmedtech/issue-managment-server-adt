@@ -26,10 +26,10 @@ export class AuthGuard implements CanActivate {
             request['user'] = payload; // Attach the user info to the request object
 
             const user = await this.prisma.user.findUnique({
-                where: { id: payload.sub },
+                where: { azureId: payload.sub },
                 include: {
-                    role: {
-                        include: {
+                    role: { 
+                        include: { 
                             permissions: {
                                 include: { permission: true },
                             },
@@ -45,8 +45,7 @@ export class AuthGuard implements CanActivate {
                 throw new UnauthorizedException('User not found');
             }
 
-            request['userDetails'] = user; // Attach user details to request
-
+            request['userDetails'] = user;
             // Validate roles and permissions
             const requiredAccess = this.reflector.get<{ roles: string[]; permissions: string[] }>(
                 'rolesAndPermissions',
@@ -84,7 +83,6 @@ export class AuthGuard implements CanActivate {
                 ...user.role.permissions.map((rp) => rp.permission.action),
                 ...user.userPermissions.map((up) => up.permission.action),
             ];
-
             const hasPermission = requiredPermissions.every((permission) =>
                 userPermissions.includes(permission)
             );

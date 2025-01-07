@@ -1,49 +1,80 @@
 import {
-    Controller,
-    Get,
-    Post,
-    Put,
-    Delete,
-    Param,
-    Body, Res,
-} from '@nestjs/common';
-import { UserService } from './user.service';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { Response } from 'express';
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Param,
+  Body,
+  Res,
+  Query,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
+import { Request, Response } from "express";
+import { UserService } from "./user.service";
+import { AuthGuard } from "src/guards/auth.guard";
 
-@Controller({ path: 'user', version: '1' })
+@Controller({ path: "user", version: "1" })
 export class UserController {
-    constructor(private readonly userService: UserService) {}
+  constructor(private readonly userService: UserService) {}
 
-    @Get()
-    async getAllUsers() {
-        return await this.userService.getAllUsers();
-    }
 
-    @Get(':id')
-    async getUserById(@Param('id') id: string) {
-        return await this.userService.getUserById(id);
-    }
+  @UseGuards(AuthGuard)
+  @Get()
+  async getAllUsers(
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+    @Req() req: Request
+  ) {
+    const pageNumber = parseInt(page, 10) || 1;
+    const limitNumber = parseInt(limit, 10) || 10;
+    return await this.userService.getAllUsers(pageNumber, limitNumber, req);
+  }
 
-    @Post()
-    async createUser(@Body() body: any) {
-        return await this.userService.createUser(body);
-    }
+  @Get("azure/login")
+  async loginWithAzuer() {
+    return await this.userService.azureLogin();
+  }
 
-    @Post('signin')
-    async login(@Body() body: any,
-                @Res({ passthrough: true }) res: Response) {
-        return await this.userService.signIn(body, res);
-    }
+  @Get("azure/redirect")
+  async handleAzureRedirect(
+    @Query("code") code: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return await this.userService.azureRedirect(code, res);
+    // return "HELLO WORLD";
+  }
 
-    @Put(':id')
-    async updateUser(@Param('id') id: string, @Body() body: UpdateUserDto) {
-        return await this.userService.updateUser(id, body);
-    }
+  @Get(":id")
+  async getUserById(@Param("id") id: string) {
+    return await this.userService.getUserById(id);
+  }
 
-    @Delete(':id')
-    async deleteUser(@Param('id') id: string) {
-        return await this.userService.deleteUser(id);
-    }
+  @Post("azure")
+  async createUser(@Body() body: any) {
+    return await this.userService.createUser(body);
+  }
+
+  @Put("azure/:id")
+  async updateUser(@Param("id") id: string, @Body() body: any) {
+    return await this.userService.updateUser(id, body);
+  }
+
+  @Delete("azure/:id")
+  async deleteUser(@Param("id") id: string) {
+    return await this.userService.deleteUser(id);
+  }
+
+  @UseGuards(AuthGuard)
+  @Get("by/token")
+  async getToken(@Req() req: Request) {
+    return this.userService.getUserByToken(req);
+  }
+
+  @UseGuards(AuthGuard)
+  @Post("logout")
+  async logout(@Res({ passthrough: true }) res: Response) {
+    return this.userService.logout(res);
+  }
 }
