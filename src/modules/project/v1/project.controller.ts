@@ -53,6 +53,20 @@ export class ProjectController {
     return await this.projectService.updateProject(id, req, files);
   }
 
+  @Post(":projectId/files")
+  @FileUploadInterceptor("./uploads/projects", 10) // Upload up to 10 files to the 'projects' directory
+  @RolesAndPermissions(
+    [ROLES.SUPER_ADMIN, ROLES.ADMIN],
+    [PERMISSIONS.PROJECT.EDIT],
+  )
+  async uploadFilesToProject(
+    @Req() req: Request,
+    @Param("projectId") projectId: string,
+    @UploadedFiles() files: Array<Express.Multer.File>,
+  ) {
+    return await this.projectService.uploadFilesToProject(projectId, files);
+  }
+
   @Get()
   @RolesAndPermissions(
     [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
@@ -68,15 +82,67 @@ export class ProjectController {
     return this.projectService.getProjects(pageNumber, limitNumber);
   }
 
-  @Delete(':projectId')
+  @Get("list")
+  @RolesAndPermissions(
+    [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
+    [PERMISSIONS.PROJECT.READ],
+  )
+  async getAllProjectList(
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+  ) {
+    const pageNumber = parseInt(page, 10) || 1;
+    const limitNumber = parseInt(limit, 10) || 10;
+
+    return this.projectService.getProjectList(pageNumber, limitNumber);
+  }
+
+  @Get(":projectId")
+  @RolesAndPermissions(
+    [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
+    [PERMISSIONS.PROJECT.READ],
+  )
+  async getById(@Param("projectId") projectId: string) {
+    return this.projectService.getById(projectId);
+  }
+
+  @Get(":projectId/files")
+  @RolesAndPermissions(
+    [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
+    [PERMISSIONS.PROJECT.READ],
+  )
+  async getAllProjectFiles(
+    @Param("projectId") projectId: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+  ) {
+    const pageNumber = parseInt(page, 10) || 1;
+    const limitNumber = parseInt(limit, 10) || 10;
+    return this.projectService.getAllProjectFiles(
+      projectId,
+      pageNumber,
+      limitNumber,
+    );
+  }
+
+  @Get(':projectId/issues')
   @RolesAndPermissions(
     [ROLES.SUPER_ADMIN, ROLES.ADMIN],
     [PERMISSIONS.PROJECT.READ],
   )
-async deleteProject(
-  @Param('projectId') projectId: string,
-  @Req() req: Request & { userDetails?: User }
-) {
-  return await this.projectService.deleteProject(projectId, req);
-}
+  async getProjectIssues(@Param('projectId') projectId: string) {
+    return await this.projectService.getProjectIssues(projectId);
+  }
+
+  @Delete(":projectId")
+  @RolesAndPermissions(
+    [ROLES.SUPER_ADMIN, ROLES.ADMIN],
+    [PERMISSIONS.PROJECT.READ],
+  )
+  async deleteProject(
+    @Param("projectId") projectId: string,
+    @Req() req: Request & { userDetails?: User },
+  ) {
+    return await this.projectService.deleteProject(projectId, req);
+  }
 }
