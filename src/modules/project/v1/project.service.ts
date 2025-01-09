@@ -329,6 +329,9 @@ export class ProjectService {
       // Fetch all issues for the given project ID along with their associated files
       const issues = await this.prisma.issue.findMany({
         where: { projectId },
+        orderBy: {
+          createdAt: 'desc',
+        },
         include: {
           issueFiles: {
             select: {
@@ -420,6 +423,9 @@ export class ProjectService {
         where: { projectId },
         skip: offset,
         take: limit,
+        orderBy: {
+          createdAt: 'desc',
+        },
         select: {
           id: true,
           filePath: true,
@@ -433,6 +439,9 @@ export class ProjectService {
         where: { issue: { projectId } },
         skip: offset,
         take: limit,
+        orderBy: {
+          createdAt: 'desc',
+        },
         select: {
           id: true,
           filePath: true,

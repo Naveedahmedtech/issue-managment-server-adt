@@ -16,7 +16,7 @@ import { Request } from "express";
 import { AuthGuard } from "src/guards/auth.guard";
 import { FileUploadInterceptor } from "src/interceptor/file-upload.interceptor";
 import { RolesAndPermissions } from "src/utils/roleAndPermission.decorator";
-import { PERMISSIONS, ROLES } from "src/constants/roles-permissions.constants";
+import { ROLES } from "src/constants/roles-permissions.constants";
 import { User } from "@prisma/client";
 
 @Controller({ path: "project", version: "1" })
@@ -28,7 +28,6 @@ export class ProjectController {
   @FileUploadInterceptor("./uploads/projects", 10)
   @RolesAndPermissions(
     [ROLES.SUPER_ADMIN, ROLES.ADMIN],
-    [PERMISSIONS.PROJECT.READ],
   )
   async createProject(
     @Req() req: Request,
@@ -42,7 +41,6 @@ export class ProjectController {
   @FileUploadInterceptor("./uploads/projects", 10)
   @RolesAndPermissions(
     [ROLES.SUPER_ADMIN, ROLES.ADMIN],
-    [PERMISSIONS.PROJECT.READ],
   )
   async updateProject(
     @Param("id") id: string,
@@ -56,8 +54,7 @@ export class ProjectController {
   @Post(":projectId/files")
   @FileUploadInterceptor("./uploads/projects", 10) // Upload up to 10 files to the 'projects' directory
   @RolesAndPermissions(
-    [ROLES.SUPER_ADMIN, ROLES.ADMIN],
-    [PERMISSIONS.PROJECT.EDIT],
+    [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
   )
   async uploadFilesToProject(
     @Req() req: Request,
@@ -70,7 +67,6 @@ export class ProjectController {
   @Get()
   @RolesAndPermissions(
     [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
-    [PERMISSIONS.PROJECT.READ],
   )
   async getAllProjects(
     @Query("page") page: string,
@@ -85,7 +81,6 @@ export class ProjectController {
   @Get("list")
   @RolesAndPermissions(
     [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
-    [PERMISSIONS.PROJECT.READ],
   )
   async getAllProjectList(
     @Query("page") page: string,
@@ -100,7 +95,6 @@ export class ProjectController {
   @Get(":projectId")
   @RolesAndPermissions(
     [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
-    [PERMISSIONS.PROJECT.READ],
   )
   async getById(@Param("projectId") projectId: string) {
     return this.projectService.getById(projectId);
@@ -109,7 +103,6 @@ export class ProjectController {
   @Get(":projectId/files")
   @RolesAndPermissions(
     [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
-    [PERMISSIONS.PROJECT.READ],
   )
   async getAllProjectFiles(
     @Param("projectId") projectId: string,
@@ -127,8 +120,7 @@ export class ProjectController {
 
   @Get(':projectId/issues')
   @RolesAndPermissions(
-    [ROLES.SUPER_ADMIN, ROLES.ADMIN],
-    [PERMISSIONS.PROJECT.READ],
+    [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
   )
   async getProjectIssues(@Param('projectId') projectId: string) {
     return await this.projectService.getProjectIssues(projectId);
@@ -137,7 +129,6 @@ export class ProjectController {
   @Delete(":projectId")
   @RolesAndPermissions(
     [ROLES.SUPER_ADMIN, ROLES.ADMIN],
-    [PERMISSIONS.PROJECT.READ],
   )
   async deleteProject(
     @Param("projectId") projectId: string,
