@@ -590,7 +590,7 @@ export class UserService {
         },
         {
           secret: process.env.JWT_SECRET || "jwt-secret",
-          expiresIn: "7d",
+          expiresIn: process.env.JWT_EXPIRY || "7d",
         },
       );
 

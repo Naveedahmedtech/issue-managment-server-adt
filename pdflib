@@ -1,0 +1,171 @@
+async generateProjectReport(
+  res: Response,
+  projectId: string,
+  filters?: any,
+): Promise<{ message: string; projectId: string; data: Buffer }> {
+  try {
+    // Fetch project details along with filtered issues and files
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        issues: {
+          where: filters || {},
+          orderBy: { createdAt: 'desc' },
+          include: {
+            issueFiles: true, // Include attached files for each issue
+          },
+        },
+      },
+    });
+
+    if (!project) throw new NotFoundException('Project not found');
+
+    // Create a new PDF document
+    const pdfDoc = await PDFDocument.create();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    // Add a page
+    let page = pdfDoc.addPage([600, 800]);
+    const { width, height } = page.getSize();
+
+    // Header
+    page.drawText('Project Report', {
+      x: 50,
+      y: height - 50,
+      size: 24,
+      font: boldFont,
+      color: rgb(0.2, 0.2, 0.2),
+    });
+
+    page.drawText(`Project Title: ${project.title}`, {
+      x: 50,
+      y: height - 80,
+      size: 16,
+      font: boldFont,
+      color: rgb(0.2, 0.2, 0.2),
+    });
+
+    // Generated Date
+    page.drawText(`Generated on: ${new Date().toLocaleString()}`, {
+      x: 50,
+      y: height - 100,
+      size: 12,
+      font: font,
+      color: rgb(0.4, 0.4, 0.4),
+    });
+
+    // Line separator
+    page.drawLine({
+      start: { x: 50, y: height - 110 },
+      end: { x: width - 50 },
+      thickness: 1,
+      color: rgb(0.8, 0.8, 0.8),
+    });
+
+    let yPosition = height - 140;
+
+    // Issues list
+    for (const [index, issue] of project.issues.entries()) {
+      if (yPosition < 150) {
+        // Create a new page if space is running out
+        page = pdfDoc.addPage([600, 800]);
+        yPosition = height - 50;
+      }
+
+      // Issue title with background color
+      page.drawRectangle({
+        x: 50,
+        y: yPosition - 20,
+        width: width - 100,
+        height: 20,
+        color: rgb(0.9, 0.9, 0.9),
+      });
+
+      page.drawText(`${index + 1}. Issue Title: ${issue.title}`, {
+        x: 55,
+        y: yPosition - 15,
+        size: 12,
+        font: boldFont,
+        color: rgb(0.2, 0.2, 0.2),
+      });
+
+      yPosition -= 40;
+
+      // Issue details
+      page.drawText(`   Description: ${issue.description ?? 'N/A'}`, { x: 55, y: yPosition, size: 10, font: font });
+      page.drawText(`   Status: ${issue.status}`, { x: 55, y: yPosition - 15, size: 10, font: font });
+      page.drawText(`   Created At: ${issue.createdAt.toISOString()}`, { x: 55, y: yPosition - 30, size: 10, font: font });
+      yPosition -= 50;
+
+      // Handle attached files
+      if (issue.issueFiles && issue.issueFiles.length > 0) {
+        page.drawText(`   Attached Files:`, { x: 55, y: yPosition, size: 12, font: boldFont });
+        yPosition -= 20;
+
+        const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000';
+
+        for (const file of issue.issueFiles) {
+          const filename = path.basename(file.filePath); // Extract filename
+
+          // Display a clean "Download File" link instead of full URL
+          page.drawText(`   - ${filename}`, { x: 70, y: yPosition, size: 10, font: font });
+
+          page.drawText(`   [Download File]`, {
+            x: 70,
+            y: yPosition - 15,
+            size: 10,
+            font: font,
+            color: rgb(0, 0, 1), // Blue color to indicate a hyperlink
+          });
+
+          // Link URL
+          const fileUrl = `${SERVER_URL}/${file.filePath}`;
+          console.log(`File URL: ${fileUrl}`);
+
+          yPosition -= 40;
+
+          // If the page is full, create a new page
+          if (yPosition < 50) {
+            page.drawText('- Continued on next page -', {
+              x: width / 2 - 60,
+              y: 30,
+              size: 10,
+              font: font,
+              color: rgb(0.5, 0.5, 0.5),
+            });
+            page = pdfDoc.addPage([600, 800]);
+            yPosition = height - 50;
+          }
+        }
+      }
+    }
+
+    // Footer
+    page.drawText(`Project ID: ${projectId}`, {
+      x: 50,
+      y: 30,
+      size: 10,
+      font: font,
+      color: rgb(0.5, 0.5, 0.5),
+    });
+
+    // Save the PDF to a Uint8Array
+    const pdfBytes = await pdfDoc.save();
+
+    // Convert Uint8Array to Buffer
+    const pdfBuffer = Buffer.from(pdfBytes);
+
+    this.logger.log(`PDF generated successfully!`);
+
+    // Return the PDF buffer
+    return {
+      message: 'PDF_GENERATED',
+      projectId: projectId,
+      data: pdfBuffer,
+    };
+  } catch (error) {
+    this.logger.error(`Error while generating PDF: ${error.message}`);
+    throw error;
+  }
+}
