@@ -26,6 +26,7 @@ model User {
   userPermissions   UserPermission[]
   projects          Project[]
   Issue             Issue[]
+  Order             Order[]
 }
 
 model Role {
@@ -121,4 +122,30 @@ model IssueFile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+}
+
+model Order {
+  id          String      @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  location    String?
+  status      String
+  price       Float?
+  startDate   DateTime?
+  endDate     DateTime?
+  archived    Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  userId      String      @db.Uuid
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files       OrderFile[]
+}
+
+model OrderFile {
+  id        String   @id @default(uuid()) @db.Uuid
+  orderId   String   @db.Uuid
+  filePath  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 }

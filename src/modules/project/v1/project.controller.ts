@@ -10,9 +10,10 @@ import {
   Query,
   Get,
   Delete,
+  Res,
 } from "@nestjs/common";
 import { ProjectService } from "./project.service";
-import { Request } from "express";
+import { Request, Response } from "express";
 import { AuthGuard } from "src/guards/auth.guard";
 import { FileUploadInterceptor } from "src/interceptor/file-upload.interceptor";
 import { RolesAndPermissions } from "src/utils/roleAndPermission.decorator";
@@ -26,9 +27,7 @@ export class ProjectController {
 
   @Post()
   @FileUploadInterceptor("./uploads/projects", 10)
-  @RolesAndPermissions(
-    [ROLES.SUPER_ADMIN, ROLES.ADMIN],
-  )
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
   async createProject(
     @Req() req: Request,
     @Body() data: any,
@@ -39,9 +38,7 @@ export class ProjectController {
 
   @Put(":id")
   @FileUploadInterceptor("./uploads/projects", 10)
-  @RolesAndPermissions(
-    [ROLES.SUPER_ADMIN, ROLES.ADMIN],
-  )
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
   async updateProject(
     @Param("id") id: string,
     @Req() req: Request,
@@ -53,9 +50,7 @@ export class ProjectController {
 
   @Post(":projectId/files")
   @FileUploadInterceptor("./uploads/projects", 10) // Upload up to 10 files to the 'projects' directory
-  @RolesAndPermissions(
-    [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
-  )
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
   async uploadFilesToProject(
     @Req() req: Request,
     @Param("projectId") projectId: string,
@@ -65,9 +60,7 @@ export class ProjectController {
   }
 
   @Get()
-  @RolesAndPermissions(
-    [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
-  )
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
   async getAllProjects(
     @Query("page") page: string,
     @Query("limit") limit: string,
@@ -79,9 +72,7 @@ export class ProjectController {
   }
 
   @Get("list")
-  @RolesAndPermissions(
-    [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
-  )
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
   async getAllProjectList(
     @Query("page") page: string,
     @Query("limit") limit: string,
@@ -93,17 +84,13 @@ export class ProjectController {
   }
 
   @Get(":projectId")
-  @RolesAndPermissions(
-    [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
-  )
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
   async getById(@Param("projectId") projectId: string) {
     return this.projectService.getById(projectId);
   }
 
   @Get(":projectId/files")
-  @RolesAndPermissions(
-    [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
-  )
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
   async getAllProjectFiles(
     @Param("projectId") projectId: string,
     @Query("page") page: string,
@@ -118,22 +105,58 @@ export class ProjectController {
     );
   }
 
-  @Get(':projectId/issues')
-  @RolesAndPermissions(
-    [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
-  )
-  async getProjectIssues(@Param('projectId') projectId: string) {
+  @Get(":projectId/issues")
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
+  async getProjectIssues(@Param("projectId") projectId: string) {
     return await this.projectService.getProjectIssues(projectId);
   }
 
   @Delete(":projectId")
-  @RolesAndPermissions(
-    [ROLES.SUPER_ADMIN, ROLES.ADMIN],
-  )
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
   async deleteProject(
     @Param("projectId") projectId: string,
     @Req() req: Request & { userDetails?: User },
   ) {
     return await this.projectService.deleteProject(projectId, req);
+  }
+
+  @Get("dashboard/stats")
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
+  async getProjectStats() {
+    return await this.projectService.getProjectStats();
+  }
+
+  @Get("dashboard/recent")
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
+  async getRecentProjects(
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+  ) {
+    const pageNumber = parseInt(page, 10) || 1;
+    const limitNumber = parseInt(limit, 10) || 10;
+    return await this.projectService.getRecentProjects(pageNumber, limitNumber);
+  }
+
+  @Get(":projectId/generate-report")
+  async downloadProjectReport(
+    @Res() res: Response,
+    @Param("projectId") projectId: string,
+    @Query("status") status?: string,
+    @Query("startDate") startDate?: string,
+    @Query("endDate") endDate?: string,
+  ) {
+    const filters: any = {};
+
+    // Apply filters if present
+    if (status) filters.status = status;
+    if (startDate) filters.startDate = { gte: new Date(startDate) };
+    if (endDate) filters.endDate = { lte: new Date(endDate) };
+
+    // Generate the PDF report
+    return  await this.projectService.generateProjectReport(
+      res,
+      projectId,
+      filters,
+    );
   }
 }
