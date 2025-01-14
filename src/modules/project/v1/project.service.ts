@@ -27,8 +27,8 @@ export class ProjectService {
           title: req.body.title,
           description: req.body.description,
           status: req.body.status,
-          startDate: new Date(req.body.startDate),
-          endDate: new Date(req.body.endDate),
+          startDate: req.body.startDate === "" ? null : new Date(req.body.startDate),
+          endDate: req.body.endDate === "" ? null :  new Date(req.body.endDate),
           userId,
         },
       });
@@ -81,10 +81,10 @@ export class ProjectService {
         }),
         ...(normalizedBody.status && { status: normalizedBody.status }),
         ...(normalizedBody.startDate && {
-          startDate: new Date(normalizedBody.startDate),
+          startDate: normalizedBody.startDate === "" ? null : new Date(normalizedBody.startDate),
         }),
         ...(normalizedBody.endDate && {
-          endDate: new Date(normalizedBody.endDate),
+          endDate: normalizedBody.endDate === "" ? null : new Date(normalizedBody.endDate),
         }),
         userId,
       };

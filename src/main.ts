@@ -1,32 +1,25 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import {ValidationPipe, VersioningType} from "@nestjs/common";
-import {PrismaExceptionFilter} from "./filters/prisma-exception.filter";
-import {ResponseInterceptor} from "./interceptor/response.interceptor";
-import * as cookieParser from 'cookie-parser';
-import {createLogger} from "./utils/logger.util";
-
+import { createLogger } from './utils/logger.util';
+import { rootRouteHandler } from './utils/server.util';
+import { setupApp } from './utils/setup.util';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: createLogger(),
   });
-  app.enableCors({
-    origin: process.env.FRONTEND_URL, 
-    credentials: true,  
-});
-  app.use(cookieParser());
-  app.useGlobalFilters(new PrismaExceptionFilter());
-  app.useGlobalInterceptors(new ResponseInterceptor());
-  app.setGlobalPrefix('api');
-  app.enableVersioning({
-    type: VersioningType.URI, // URI-based versioning
-  });
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  }));
+
+  // Setup the application with CORS, filters, pipes, etc.
+  await setupApp(app);
+
+  // Access the underlying Express instance
+  const expressApp = app.getHttpAdapter().getInstance();
+
+  // Root route handler
+  expressApp.get('/', rootRouteHandler);
+
+  // Start the application
   await app.listen(process.env.PORT ?? 3000);
 }
+
 bootstrap();

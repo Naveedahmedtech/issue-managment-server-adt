@@ -10,9 +10,15 @@ import { ServeStaticModule } from "@nestjs/serve-static";
 import { join } from "path";
 import { IssueModule } from "./modules/issue/v1/issue.module";
 import { OrderModule } from "./modules/order/v1/order.module";
+import { ConfigModule } from '@nestjs/config';
+
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env', 
+    }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, "..", "uploads"),
       serveRoot: "/uploads",

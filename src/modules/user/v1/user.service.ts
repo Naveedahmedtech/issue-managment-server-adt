@@ -401,23 +401,22 @@ export class UserService {
   async getAllUsers(
     page: number = 1,
     limit: number = 20,
-    req: Request & { userDetails?: User },
+    // req: Request & { userDetails?: User },
   ) {
-    this.logger.log("Fetching all users with pagination...");
 
     try {
       const skip = (page - 1) * limit;
-      const currentUserId = req.userDetails?.id;
+      // const currentUserId = req.userDetails?.id;
 
       // Fetch users, excluding the current logged-in user
       const users = await this.prisma.user.findMany({
         skip,
         take: limit,
-        where: {
-          id: {
-            not: currentUserId,
-          },
-        },
+        // where: {
+        //   id: {
+        //     not: currentUserId,
+        //   },
+        // },
         select: {
           id: true,
           email: true,
@@ -456,11 +455,11 @@ export class UserService {
 
       // Count total users excluding the current user
       const totalUsers = await this.prisma.user.count({
-        where: {
-          id: {
-            not: currentUserId,
-          },
-        },
+        // where: {
+        //   id: {
+        //     not: currentUserId,
+        //   },
+        // },
       });
 
       // Format the users' data
