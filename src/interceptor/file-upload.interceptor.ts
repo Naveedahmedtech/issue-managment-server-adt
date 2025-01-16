@@ -13,13 +13,14 @@ export function FileUploadInterceptor(destinationPath: string, maxFiles = 10) {
             const fileExtName = extname(file.originalname);
             const fileNameWithoutExt = basename(file.originalname, fileExtName);
             
-            const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-            const finalFileName = `${fileNameWithoutExt}-${uniqueSuffix}${fileExtName}`;
+            // const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+            // const finalFileName = `${fileNameWithoutExt}-${uniqueSuffix}${fileExtName}`;
+            const finalFileName = `${fileNameWithoutExt}${fileExtName}`;
             
             callback(null, finalFileName);
           },
         }),
-      }),
+      }), 
     ),
   );
 }

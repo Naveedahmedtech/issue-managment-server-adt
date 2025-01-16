@@ -10,6 +10,7 @@ import {
   Query,
   Get,
   Delete,
+  Patch,
 } from "@nestjs/common";
 import { OrderService } from "./order.service";
 import { Request } from "express";
@@ -58,6 +59,14 @@ export class OrderController {
     return await this.orderService.uploadFilesToOrder(oderId, files);
   }
 
+  @Patch(":orderId/toggle-archive")
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
+  async toggleArchiveProject(
+    @Param("orderId") orderId: string,
+  ) {
+    return await this.orderService.toggleArchiveOrder(orderId);
+  }
+
   @Get()
   @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
   async getAllProjects(
@@ -88,7 +97,17 @@ export class OrderController {
     return this.orderService.getById(oderId);
   }
 
+  @Get("archived/list")
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
+  async getArchivedOrderList(
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+  ) {
+    const pageNumber = parseInt(page, 10) || 1;
+    const limitNumber = parseInt(limit, 10) || 10;
 
+    return this.orderService.getArchivedOrderList(pageNumber, limitNumber);
+  }
 
   @Delete(":oderId")
   @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])

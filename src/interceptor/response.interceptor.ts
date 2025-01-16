@@ -25,6 +25,8 @@ export class ResponseInterceptor implements NestInterceptor {
                   "Content-Disposition": `attachment; filename="Project_Report_${data?.projectId}.pdf"`,
                 });
                 return response.send(data?.data)
+              } else if (data.message === "DOWNLOAD_FILE") {
+                return response.download(data?.data?.filePath)
               } else {
                   return {
                       status: 'success',

@@ -11,6 +11,7 @@ import {
   Get,
   Delete,
   Res,
+  Patch,
 } from "@nestjs/common";
 import { ProjectService } from "./project.service";
 import { Request, Response } from "express";
@@ -48,6 +49,20 @@ export class ProjectController {
     return await this.projectService.updateProject(id, req, files);
   }
 
+  @Put(":fileId/update-file")
+  @FileUploadInterceptor("./uploads/updatedFiles", 10)
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
+  async updateFile(
+    @Param("fileId") fileId: string,
+    @Body() data: any,
+    @UploadedFiles() files: Express.Multer.File,
+  ) {
+    return await this.projectService.updateFile(
+      { projectId: data?.projectId, issueId: data?.issueId, fileId },
+      files,
+    );
+  }
+
   @Post(":projectId/files")
   @FileUploadInterceptor("./uploads/projects", 10) // Upload up to 10 files to the 'projects' directory
   @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
@@ -57,6 +72,14 @@ export class ProjectController {
     @UploadedFiles() files: Array<Express.Multer.File>,
   ) {
     return await this.projectService.uploadFilesToProject(projectId, files);
+  }
+
+  @Patch(":projectId/toggle-archive")
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
+  async toggleArchiveProject(
+    @Param("projectId") projectId: string,
+  ) {
+    return await this.projectService.toggleArchiveProject(projectId);
   }
 
   @Get()
@@ -81,6 +104,18 @@ export class ProjectController {
     const limitNumber = parseInt(limit, 10) || 10;
 
     return this.projectService.getProjectList(pageNumber, limitNumber);
+  }
+
+  @Get("archived")
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
+  async getArchivedProjectList(
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+  ) {
+    const pageNumber = parseInt(page, 10) || 1;
+    const limitNumber = parseInt(limit, 10) || 10;
+
+    return this.projectService.getArchivedProjectList(pageNumber, limitNumber);
   }
 
   @Get(":projectId")
@@ -153,10 +188,23 @@ export class ProjectController {
     if (endDate) filters.endDate = { lte: new Date(endDate) };
 
     // Generate the PDF report
-    return  await this.projectService.generateProjectReport(
+    return await this.projectService.generateProjectReport(
       res,
       projectId,
       filters,
+    );
+  }
+
+  @Get("files/:fileId/download")
+  async downloadFile(
+    @Res() res: Response,
+    @Param("fileId") fileId: string,
+    @Query("type") type: 'project' | 'issue',
+  ) {
+    // Generate the PDF report
+    return await this.projectService.downloadFile(
+      fileId,
+      type,
     );
   }
 }
