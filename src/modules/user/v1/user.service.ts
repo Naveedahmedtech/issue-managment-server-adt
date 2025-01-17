@@ -261,106 +261,110 @@ export class UserService {
   async updateUser(userId: string, data: any) {
     this.logger.log(`Updating user: ${userId}`);
     try {
-        // Check if the user exists
-        const existingUser = await this.prisma.user.findUnique({
-            where: { id: userId },
-            include: {
-                role: true,
-                userPermissions: true,
-            },
+      // Check if the user exists
+      const existingUser = await this.prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          role: true,
+          userPermissions: true,
+        },
+      });
+
+      if (!existingUser) {
+        throw new Error(`User with ID ${userId} not found`);
+      }
+
+      // Start building the update object
+      const updateData: any = {};
+
+      // Update basic user details if provided
+      if (data.name) updateData.name = data.name;
+      if (data.email) updateData.email = data.email;
+      if (data.displayName) updateData.displayName = data.displayName;
+      if (data.email && data.email !== existingUser.email) {
+        updateData.email = data.email;
+        await this.updateAzureUser(existingUser.azureId, { email: data.email });
+      }
+
+      // Handle role updates
+      if (data.roleId && data.roleId !== existingUser.roleId) {
+        const roleExists = await this.prisma.role.findUnique({
+          where: { id: data.roleId },
         });
 
-        if (!existingUser) {
-            throw new Error(`User with ID ${userId} not found`);
+        if (!roleExists) {
+          throw new Error(`Role with ID ${data.roleId} not found`);
         }
 
-        // Start building the update object
-        const updateData: any = {};
+        updateData.roleId = data.roleId;
+      }
 
-        // Update basic user details if provided
-        if (data.name) updateData.name = data.name;
-        if (data.email) updateData.email = data.email;
-        if (data.displayName) updateData.displayName = data.displayName;
-        if (data.email && data.email !== existingUser.email) {
-            updateData.email = data.email;
-            await this.updateAzureUser(existingUser.azureId, { email: data.email });
-        }
+      // Start a Prisma transaction
+      const transactions: any[] = [];
 
-        // Handle role updates
-        if (data.roleId && data.roleId !== existingUser.roleId) {
-            const roleExists = await this.prisma.role.findUnique({
-                where: { id: data.roleId },
-            });
+      // Update user details if any fields are provided
+      if (Object.keys(updateData).length > 0) {
+        transactions.push(
+          this.prisma.user.update({
+            where: { id: userId },
+            data: updateData,
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              displayName: true,
+              createdAt: true,
+              updatedAt: true,
+              role: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          }),
+        );
+      }
 
-            if (!roleExists) {
-                throw new Error(`Role with ID ${data.roleId} not found`);
-            }
+      // Handle permission updates
+      if (data.permissions && Array.isArray(data.permissions)) {
+        // Clear existing permissions
+        transactions.push(
+          this.prisma.userPermission.deleteMany({
+            where: { userId },
+          }),
+        );
 
-            updateData.roleId = data.roleId;
-        }
+        // Add new permissions
+        transactions.push(
+          this.prisma.userPermission.createMany({
+            data: data.permissions.map((permissionId: string) => ({
+              userId,
+              permissionId,
+            })),
+            skipDuplicates: true,
+          }),
+        );
+      }
 
-        // Start a Prisma transaction
-        const transactions: any[] = [];
+      // Execute the transactions
+      const [updatedUser] = await this.prisma.$transaction(transactions);
 
-        // Update user details if any fields are provided
-        if (Object.keys(updateData).length > 0) {
-            transactions.push(
-                this.prisma.user.update({
-                    where: { id: userId },
-                    data: updateData,
-                    select: {
-                        id: true,
-                        email: true,
-                        name: true,
-                        displayName: true,
-                        createdAt: true,
-                        updatedAt: true,
-                        role: {
-                            select: {
-                                id: true,
-                                name: true,
-                            },
-                        },
-                    },
-                }),
-            );
-        }
-
-        // Handle permission updates
-        if (data.permissions && Array.isArray(data.permissions)) {
-            // Clear existing permissions
-            transactions.push(
-                this.prisma.userPermission.deleteMany({
-                    where: { userId },
-                }),
-            );
-
-            // Add new permissions
-            transactions.push(
-                this.prisma.userPermission.createMany({
-                    data: data.permissions.map((permissionId: string) => ({
-                        userId,
-                        permissionId,
-                    })),
-                    skipDuplicates: true,
-                }),
-            );
-        }
-
-        // Execute the transactions
-        const [updatedUser] = await this.prisma.$transaction(transactions);
-
-        this.logger.log(`User updated successfully: ${updatedUser?.email || userId}`);
-        return {
-            message: 'User updated successfully',
-            data: updatedUser || { userId },
-        };
+      this.logger.log(
+        `User updated successfully: ${updatedUser?.email || userId}`,
+      );
+      return {
+        message: "User updated successfully",
+        data: updatedUser || { userId },
+      };
     } catch (error) {
-        this.logger.error(`Failed to update user: ${data?.email || userId}`, error.stack);
-        throw error;
+      this.logger.error(
+        `Failed to update user: ${data?.email || userId}`,
+        error.stack,
+      );
+      throw error;
     }
-}
-
+  }
 
   /**
    * delete a user from the database and Azure AD.
@@ -401,23 +405,21 @@ export class UserService {
   async getAllUsers(
     page: number = 1,
     limit: number = 20,
-    req: Request & { userDetails?: User },
+    // req: Request & { userDetails?: User },
   ) {
-    this.logger.log("Fetching all users with pagination...");
-
     try {
       const skip = (page - 1) * limit;
-      const currentUserId = req.userDetails?.id;
+      // const currentUserId = req.userDetails?.id;
 
       // Fetch users, excluding the current logged-in user
       const users = await this.prisma.user.findMany({
         skip,
         take: limit,
-        where: {
-          id: {
-            not: currentUserId,
-          },
-        },
+        // where: {
+        //   id: {
+        //     not: currentUserId,
+        //   },
+        // },
         select: {
           id: true,
           email: true,
@@ -456,11 +458,11 @@ export class UserService {
 
       // Count total users excluding the current user
       const totalUsers = await this.prisma.user.count({
-        where: {
-          id: {
-            not: currentUserId,
-          },
-        },
+        // where: {
+        //   id: {
+        //     not: currentUserId,
+        //   },
+        // },
       });
 
       // Format the users' data
@@ -487,11 +489,13 @@ export class UserService {
       this.logger.log("Fetched users successfully");
       return {
         message: "Users fetched successfully",
-        data: formattedUsers,
-        pagination: {
-          total: totalUsers,
-          page,
-          limit,
+        data: {
+          pagination: {
+            total: totalUsers,
+            page,
+            limit,
+          },
+          users: formattedUsers,
         },
       };
     } catch (error) {

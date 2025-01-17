@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import { User } from "@prisma/client";
 import { Request, Response } from "express";
 import { join } from "path";
@@ -27,8 +32,9 @@ export class ProjectService {
           title: req.body.title,
           description: req.body.description,
           status: req.body.status,
-          startDate: new Date(req.body.startDate),
-          endDate: new Date(req.body.endDate),
+          startDate:
+            req.body.startDate === "" ? null : new Date(req.body.startDate),
+          endDate: req.body.endDate === "" ? null : new Date(req.body.endDate),
           userId,
         },
       });
@@ -81,10 +87,16 @@ export class ProjectService {
         }),
         ...(normalizedBody.status && { status: normalizedBody.status }),
         ...(normalizedBody.startDate && {
-          startDate: new Date(normalizedBody.startDate),
+          startDate:
+            normalizedBody.startDate === ""
+              ? null
+              : new Date(normalizedBody.startDate),
         }),
         ...(normalizedBody.endDate && {
-          endDate: new Date(normalizedBody.endDate),
+          endDate:
+            normalizedBody.endDate === ""
+              ? null
+              : new Date(normalizedBody.endDate),
         }),
         userId,
       };
@@ -188,10 +200,20 @@ export class ProjectService {
         pathPosix.basename(file.filePath),
       );
 
-      // Filter out already uploaded files
-      const newFiles = files.filter(
-        (file) => !existingFileNames.includes(file.filename),
-      );
+      // Separate new and existing files
+      const newFiles = [];
+      const skippedFiles = [];
+
+      files.forEach((file) => {
+        if (existingFileNames.includes(file.filename)) {
+          skippedFiles.push({
+            filename: file.filename,
+            message: "File already exists for this project.",
+          });
+        } else {
+          newFiles.push(file);
+        }
+      });
 
       // Insert only new files into the File table
       if (newFiles.length > 0) {
@@ -206,14 +228,14 @@ export class ProjectService {
       }
 
       this.logger.log(
-        `Files uploaded to project: ${projectId}, Skipped files: ${files.length - newFiles.length}`,
+        `Files uploaded to project: ${projectId}, Skipped files: ${skippedFiles.length}`,
       );
 
       return {
-        message: "Files uploaded successfully!",
+        message: "Files processed successfully!",
         projectId,
-        skippedFiles: files.length - newFiles.length,
-        uploadedFiles: newFiles.length,
+        uploadedFiles: newFiles.map((file) => file.filename),
+        skippedFiles,
       };
     } catch (error) {
       this.logger.error(
@@ -275,6 +297,9 @@ export class ProjectService {
       const projects = await this.prisma.project.findMany({
         skip: offset,
         take: limit,
+        where: {
+          archived: false
+        },
         orderBy: { createdAt: "desc" },
         select: {
           id: true,
@@ -412,10 +437,10 @@ export class ProjectService {
   async getAllProjectFiles(
     projectId: string,
     page: number = 1,
-    limit: number = 10,
+    limit: number = 1000,
   ) {
     try {
-      const offset = (page - 1) * limit;
+      // const offset = (page - 1) * limit;
 
       // Get total counts for projectFiles and issueFiles
       const projectFilesCount = await this.prisma.file.count({
@@ -429,8 +454,8 @@ export class ProjectService {
       // Fetch project files with pagination
       const projectFiles = await this.prisma.file.findMany({
         where: { projectId },
-        skip: offset,
-        take: limit,
+        // skip: offset,
+        // take: limit,
         orderBy: {
           createdAt: "desc",
         },
@@ -445,8 +470,8 @@ export class ProjectService {
       // Fetch issue files with pagination
       const issueFiles = await this.prisma.issueFile.findMany({
         where: { issue: { projectId } },
-        skip: offset,
-        take: limit,
+        // skip: offset,
+        // take: limit,
         orderBy: {
           createdAt: "desc",
         },
@@ -610,6 +635,9 @@ export class ProjectService {
       const recentProjects = await this.prisma.project.findMany({
         skip: offset,
         take: limit,
+        where: {
+          archived: false
+        },
         orderBy: {
           createdAt: "desc",
         },
@@ -716,7 +744,7 @@ export class ProjectService {
       );
       doc.text(
         `End Date: ${project.endDate ? new Date(project.endDate).toLocaleDateString() : "N/A"}`,
-      );      
+      );
       doc.moveDown();
 
       // Line separator
@@ -845,4 +873,210 @@ export class ProjectService {
       throw error;
     }
   }
+
+  async updateFile(
+    params: { projectId?: string; issueId?: string; fileId: string },
+    files: Express.Multer.File,
+  ) {
+    const { projectId, issueId, fileId } = params;
+
+    try {
+      // Validate input
+      if (!fileId) {
+        throw new BadRequestException("File ID is required!");
+      }
+      if (!files) {
+        throw new BadRequestException("No file provided!");
+      }
+      if (!projectId && !issueId) {
+        throw new BadRequestException(
+          "Either projectId or issueId is required!",
+        );
+      }
+
+      // Determine the context: project or issue
+      const fileContext = projectId ? "project" : "issue";
+
+      // Find the file in the database
+      let existingFile;
+      if (fileContext === "project") {
+        existingFile = await this.prisma.file.findUnique({
+          where: { id: fileId },
+          include: { project: true },
+        });
+      } else {
+        existingFile = await this.prisma.issueFile.findUnique({
+          where: { id: fileId },
+          include: { issue: true },
+        });
+      }
+
+      if (!existingFile) {
+        throw new NotFoundException("File not found!");
+      }
+
+      // Unlink the existing file from the server
+      const existingFilePath = join(
+        "./uploads",
+        fileContext === "project" ? "projects" : "issues",
+        pathPosix.basename(existingFile.filePath),
+      );
+      try {
+        await unlink(existingFilePath);
+        this.logger.log(`Unlinked existing file: ${existingFilePath}`);
+      } catch (unlinkError) {
+        this.logger.error(
+          `Failed to unlink file: ${existingFilePath}`,
+          unlinkError,
+        );
+      }
+
+      // Construct the new file path
+      const newFilePath = pathPosix.join(
+        "uploads",
+        "updatedFiles",
+        files[0].filename,
+      );
+
+      // Update the file path in the database
+      if (fileContext === "project") {
+        await this.prisma.file.update({
+          where: { id: fileId },
+          data: { filePath: newFilePath },
+        });
+      } else {
+        await this.prisma.issueFile.update({
+          where: { id: fileId },
+          data: { filePath: newFilePath },
+        });
+      }
+
+      this.logger.log(
+        `File updated for ${fileContext}: ${fileContext === "project" ? projectId : issueId}, fileId: ${fileId}`,
+      );
+
+      return {
+        message: "File updated successfully!",
+        updatedFilePath: newFilePath,
+      };
+    } catch (error) {
+      this.logger.error("Failed to update file", error.stack);
+      throw error;
+    }
+  }
+
+  async downloadFile(fileId: string, type: "project" | "issue") {
+    try {
+      // Fetch file details based on the type
+      const file =
+        type === "project"
+          ? await this.prisma.file.findUnique({
+              where: { id: fileId },
+            })
+          : await this.prisma.issueFile.findUnique({
+              where: { id: fileId },
+            });
+
+      if (!file) {
+        throw new NotFoundException("File not found!");
+      }
+
+      const filePath = join(
+        "./uploads",
+        type === "project" ? "projects" : "issues",
+        pathPosix.basename(file.filePath),
+      );
+
+      // Send the file to the user
+      return { 
+        message: "DOWNLOAD_FILE",
+        data: { filePath },
+      };
+    } catch (error) {
+      this.logger.error(`Error downloading file: ${error.message}`);
+      throw error;
+    }
+  } 
+
+
+
+  async toggleArchiveProject(projectId: string) {
+    try {
+      // Find the project to ensure it exists and get the current archived state
+      const project = await this.prisma.project.findUnique({
+        where: { id: projectId },
+      });
+  
+      if (!project) {
+        throw new NotFoundException("Project not found!");
+      }
+  
+      // Toggle the archived state
+      const newArchivedState = !project.archived;
+  
+      const updatedProject = await this.prisma.project.update({
+        where: { id: projectId },
+        data: {
+          archived: newArchivedState, // Toggle the state
+        },
+      });
+  
+      this.logger.log(
+        `Project ${newArchivedState ? "archived" : "unarchived"} successfully: ${
+          updatedProject.id
+        }`
+      );
+  
+      return {
+        message: `Project ${newArchivedState ? "archived" : "unarchived"} successfully`,
+        data: updatedProject,
+      };
+    } catch (error) {
+      this.logger.error("Failed to toggle archive state for project", error.stack);
+      throw error;
+    }
+  }
+
+  async getArchivedProjectList(page: number = 1, limit: number = 10) {
+    try {
+      const offset = (page - 1) * limit;
+
+      // Fetch projects with only id and name
+      const projects = await this.prisma.project.findMany({
+        skip: offset,
+        take: limit,
+        where: {
+          archived: true
+        },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          description: true,
+        },
+      });
+
+      const totalProjects = await this.prisma.project.count({
+        where: {
+          archived: true,
+        },
+      });
+      const response = {
+        total: totalProjects,
+        page,
+        limit,
+        totalPages: Math.ceil(totalProjects / limit),
+        projects,
+      };
+      return {
+        message: "Projects retrieved successfully!",
+        data: response,
+      };
+    } catch (error) {
+      this.logger.error("Failed to fetch projects", error.stack);
+      throw error;
+    }
+  }
+
 }
