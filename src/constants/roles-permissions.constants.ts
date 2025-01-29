@@ -28,4 +28,8 @@ export const PERMISSIONS = {
         DELETE: 'DELETE_ISSUE',
         READ: 'READ_ISSUE',
     },
+    FILES: {
+        UPLOAD_PROJECT: 'UPLOAD_PROJECT_FILES',
+        UPLOAD_ORDER: 'UPLOAD_ORDER_FILES',
+    }
 };

@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, UnauthorizedException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { User } from "@prisma/client";
 import { Request } from "express";
 import { join } from "path";
@@ -6,7 +6,7 @@ import { unlink } from "fs/promises";
 import { PrismaService } from "src/utils/prisma.service";
 import { posix as pathPosix } from "path";
 import { normalizeKeys } from "src/utils/common";
-import { ROLES } from "src/constants/roles-permissions.constants";
+// import { ROLES } from "src/constants/roles-permissions.constants";
 
 
 export interface ExtendedUser extends User {
@@ -35,8 +35,8 @@ export class IssueService {
           title: req.body.title,
           description: req.body.description,
           status: req.body?.status?.toUpperCase(),
-          startDate: new Date(req.body.startDate),
-          endDate: new Date(req.body.endDate),
+          startDate: req.body.startDate ? new Date(req.body.startDate) : null,
+          endDate: req.body.endDate ? new Date(req.body.endDate) : null,
           projectId: req.body.projectId,
           userId,
         },
@@ -53,10 +53,10 @@ export class IssueService {
         }
       }
 
-      this.logger.log(`Project created successfully: ${newIssue.id}`);
-      return { message: "Project created successfully", data: newIssue };
+      this.logger.log(`issue created successfully: ${newIssue.id}`);
+      return { message: "issue created successfully", data: newIssue };
     } catch (error) {
-      this.logger.error("Failed to create project", error.stack);
+      this.logger.error("Failed to create issue", error);
 
       if (files && files.length > 0) {
         for (const file of files) {
@@ -78,7 +78,7 @@ export class IssueService {
     req: Request & { userDetails?: ExtendedUser },
     files: Array<Express.Multer.File>,
   ) {
-    const { id: userId, role } = req.userDetails;
+    // const { id: userId, role } = req.userDetails;
     try {
       // Validate if the issue exists
       const existingIssue = await this.prisma.issue.findUnique({
@@ -90,9 +90,9 @@ export class IssueService {
       }
 
       // Check if the user's role is WORKER and if they are the owner of the issue
-      if (role?.name === ROLES.WORKER && existingIssue.userId !== userId) {
-        throw new UnauthorizedException("You are not authorized to update this issue.");
-      }
+      // if (role?.name === ROLES.WORKER && existingIssue.userId !== userId) {
+      //   throw new UnauthorizedException("You are not authorized to update this issue.");
+      // }
 
       // Normalize request body for partial updates
       const normalizedBody = normalizeKeys(req.body) as any;
@@ -154,7 +154,7 @@ export class IssueService {
         data: updatedIssueWithFiles,
       };
     } catch (error) {
-      this.logger.error("Failed to update issue", error.stack);
+      this.logger.error("Failed to update issue", error);
 
       // Cleanup newly uploaded files in case of an error
       if (files && files.length > 0) {
@@ -189,7 +189,7 @@ export class IssueService {
       for (const file of existingIssue.issueFiles) {
         try {
           await unlink(
-            join("./uploads/issues", file.filePath.split("/").pop()),
+            join("./", file.filePath),
           );
           this.logger.log(`Deleted file from server: ${file.filePath}`);
         } catch (error) {
@@ -209,7 +209,7 @@ export class IssueService {
       this.logger.log(`Issue deleted successfully: ${issueId}`);
       return { message: "Issue deleted successfully!" };
     } catch (error) {
-      this.logger.error(`Failed to delete issue: ${issueId}`, error.stack);
+      this.logger.error(`Failed to delete issue: ${issueId}`, error);
       throw error;
     }
   }

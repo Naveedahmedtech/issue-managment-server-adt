@@ -253,7 +253,7 @@ export class UserService {
         data: user,
       };
     } catch (error) {
-      this.logger.error(`Failed to create user: ${data.email}`, error.stack);
+      this.logger.error(`Failed to create user: ${data.email}`, error);
       throw error;
     }
   }
@@ -360,7 +360,7 @@ export class UserService {
     } catch (error) {
       this.logger.error(
         `Failed to update user: ${data?.email || userId}`,
-        error.stack,
+        error,
       );
       throw error;
     }
@@ -396,7 +396,7 @@ export class UserService {
     } catch (error) {
       this.logger.error(
         `Failed to delete user with ID: ${userId}`,
-        error.stack,
+        error,
       );
       throw error;
     }
@@ -499,7 +499,7 @@ export class UserService {
         },
       };
     } catch (error) {
-      this.logger.error("Failed to fetch users", error.stack);
+      this.logger.error("Failed to fetch users", error);
       throw error;
     }
   }
@@ -528,7 +528,7 @@ export class UserService {
         data: user,
       };
     } catch (error) {
-      this.logger.error(`Failed to fetch user with ID ${id}`, error.stack);
+      this.logger.error(`Failed to fetch user with ID ${id}`, error);
       throw error;
     }
   }
@@ -616,7 +616,7 @@ export class UserService {
     } catch (error) {
       // Handle errors only if the headers have not been sent
       if (!res.headersSent) {
-        this.logger.error("Azure sign-in failed", error.stack);
+        this.logger.error("Azure sign-in failed", error);
         throw error;
       } else {
         this.logger.warn("Error occurred after headers were sent. Ignoring.");
@@ -653,7 +653,7 @@ export class UserService {
         message: "Logout successful",
       };
     } catch (error) {
-      this.logger.error("Logout failed", error.stack);
+      this.logger.error("Logout failed", error);
       throw new Error("Logout failed");
     }
   }
@@ -723,7 +723,7 @@ export class UserService {
         },
       };
     } catch (error) {
-      this.logger.error(`Failed to fetch user with ID ${id}`, error.stack);
+      this.logger.error(`Failed to fetch user with ID ${id}`, error);
       throw error;
     }
   }

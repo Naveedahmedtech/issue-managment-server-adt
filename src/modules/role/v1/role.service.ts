@@ -17,7 +17,7 @@ export class RoleService {
                 data: roles,
             };
         } catch (error) {
-            this.logger.error('Failed to fetch roles', error.stack);
+            this.logger.error('Failed to fetch roles', error);
             throw error;
         }
     }
@@ -33,7 +33,7 @@ export class RoleService {
                 data: role,
             };
         } catch (error) {
-            this.logger.error(`Failed to create role: ${data.name}`, error.stack);
+            this.logger.error(`Failed to create role: ${data.name}`, error);
             throw error;
         }
     }
@@ -51,7 +51,7 @@ export class RoleService {
                 data: role,
             };
         } catch (error) {
-            this.logger.error(`Failed to update role: ID ${id}`, error.stack);
+            this.logger.error(`Failed to update role: ID ${id}`, error);
             throw error;
         }
     }
@@ -66,7 +66,7 @@ export class RoleService {
                 data: null,
             };
         } catch (error) {
-            this.logger.error(`Failed to delete role: ID ${id}`, error.stack);
+            this.logger.error(`Failed to delete role: ID ${id}`, error);
             throw error;
         }
     }

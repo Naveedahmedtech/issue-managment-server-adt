@@ -18,8 +18,10 @@ import { Request, Response } from "express";
 import { AuthGuard } from "src/guards/auth.guard";
 import { FileUploadInterceptor } from "src/interceptor/file-upload.interceptor";
 import { RolesAndPermissions } from "src/utils/roleAndPermission.decorator";
-import { ROLES } from "src/constants/roles-permissions.constants";
+import { PERMISSIONS, ROLES } from "src/constants/roles-permissions.constants";
 import { User } from "@prisma/client";
+import { ValidationUtils } from "src/utils/validation.utils";
+import { normalizeKeys } from "src/utils/common";
 
 @Controller({ path: "project", version: "1" })
 @UseGuards(AuthGuard)
@@ -28,29 +30,83 @@ export class ProjectController {
 
   @Post()
   @FileUploadInterceptor("./uploads/projects", 10)
-  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
+  @RolesAndPermissions(
+    [ROLES.SUPER_ADMIN, ROLES.ADMIN],
+    [PERMISSIONS.PROJECT.CREATE],
+  )
   async createProject(
     @Req() req: Request,
     @Body() data: any,
     @UploadedFiles() files: Array<Express.Multer.File>,
   ) {
-    return await this.projectService.createProject(req, files);
+    ValidationUtils.validateRequiredString(data.title, "Title");
+    ValidationUtils.validateRequiredString(data.status, "Status");
+    data.status = ValidationUtils.toUpperCase(data.status);
+
+    const startDate = ValidationUtils.validateOptionalDate(
+      data.startDate,
+      "Start Date",
+    );
+    const endDate = ValidationUtils.validateOptionalDate(
+      data.endDate,
+      "End Date",
+    );
+    if (startDate && endDate) {
+      ValidationUtils.validateDateRange(startDate, endDate);
+    }
+
+    ValidationUtils.validateOptionalString(data.companyName, "Company Name");
+
+    return await this.projectService.createProject(req, files, data);
   }
 
   @Put(":id")
   @FileUploadInterceptor("./uploads/projects", 10)
-  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
+  @RolesAndPermissions(
+    [ROLES.SUPER_ADMIN, ROLES.ADMIN],
+    [PERMISSIONS.PROJECT.EDIT],
+  )
   async updateProject(
     @Param("id") id: string,
     @Req() req: Request,
     @Body() data: any,
     @UploadedFiles() files: Array<Express.Multer.File>,
   ) {
-    return await this.projectService.updateProject(id, req, files);
+    console.log("data", data);
+    const normalizedData = normalizeKeys(data) as any;
+    ValidationUtils.validateRequiredString(normalizedData.title, "title");
+    ValidationUtils.validateRequiredString(normalizedData.status, "status");
+    data.status = ValidationUtils.toUpperCase(normalizedData.status);
+
+    const startDate = ValidationUtils.validateOptionalDate(
+      normalizedData.startDate,
+      "startDate",
+    );
+    const endDate = ValidationUtils.validateOptionalDate(
+      normalizedData.endDate,
+      "endDate",
+    );
+    if (startDate && endDate) {
+      ValidationUtils.validateDateRange(startDate, endDate);
+    }
+    ValidationUtils.validateOptionalString(
+      normalizedData.companyName,
+      "companyName",
+    );
+    ValidationUtils.validateOptionalString(
+      normalizedData.description,
+      "description",
+    );
+    return await this.projectService.updateProject(
+      id,
+      req,
+      files,
+      normalizedData,
+    );
   }
 
   @Put(":fileId/update-file")
-  @FileUploadInterceptor("./uploads/updatedFiles", 10)
+  @FileUploadInterceptor("./uploads/projects", 10)
   @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
   async updateFile(
     @Param("fileId") fileId: string,
@@ -65,7 +121,10 @@ export class ProjectController {
 
   @Post(":projectId/files")
   @FileUploadInterceptor("./uploads/projects", 10) // Upload up to 10 files to the 'projects' directory
-  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
+  @RolesAndPermissions(
+    [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
+    [PERMISSIONS.FILES.UPLOAD_PROJECT],
+  )
   async uploadFilesToProject(
     @Req() req: Request,
     @Param("projectId") projectId: string,
@@ -76,9 +135,7 @@ export class ProjectController {
 
   @Patch(":projectId/toggle-archive")
   @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
-  async toggleArchiveProject(
-    @Param("projectId") projectId: string,
-  ) {
+  async toggleArchiveProject(@Param("projectId") projectId: string) {
     return await this.projectService.toggleArchiveProject(projectId);
   }
 
@@ -147,7 +204,10 @@ export class ProjectController {
   }
 
   @Delete(":projectId")
-  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
+  @RolesAndPermissions(
+    [ROLES.SUPER_ADMIN, ROLES.ADMIN],
+    [PERMISSIONS.PROJECT.DELETE],
+  )
   async deleteProject(
     @Param("projectId") projectId: string,
     @Req() req: Request & { userDetails?: User },
@@ -166,10 +226,23 @@ export class ProjectController {
   async getRecentProjects(
     @Query("page") page: string,
     @Query("limit") limit: string,
+    @Query("search") search: string,
+    @Query("sortOrder") sortOrder: "asc" | "desc",
+    @Query("status") status: string,
+    @Query("endDate") endDate: string,
+    @Query("startDate") startDate: string,
   ) {
     const pageNumber = parseInt(page, 10) || 1;
     const limitNumber = parseInt(limit, 10) || 10;
-    return await this.projectService.getRecentProjects(pageNumber, limitNumber);
+    return await this.projectService.getRecentProjects(
+      pageNumber,
+      limitNumber,
+      search,
+      status,
+      startDate,
+      endDate,
+      sortOrder,
+    );
   }
 
   @Get(":projectId/generate-report")
@@ -199,12 +272,46 @@ export class ProjectController {
   async downloadFile(
     @Res() res: Response,
     @Param("fileId") fileId: string,
-    @Query("type") type: 'project' | 'issue',
+    @Query("type") type: "project" | "issue",
   ) {
     // Generate the PDF report
-    return await this.projectService.downloadFile(
-      fileId,
-      type,
+    return await this.projectService.downloadFile(fileId, type);
+  }
+
+  @Patch("issues/:issueId/update-log-history")
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
+  async updateIssue(
+    @Param("issueId") issueId: string,
+    @Body()
+    updateData: Array<{
+      fieldName: string;
+      oldValue: string | null;
+      newValue: string | null;
+    }>,
+    @Req() req: Request,
+  ) {
+    return await this.projectService.updateIssueLogHistory(
+      req,
+      issueId,
+      updateData,
+    );
+  }
+
+  @Get(":projectId/activity-logs")
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
+  async getIssueHistory(
+    @Param("projectId") projectId: string,
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+    @Query("issueId") issueId: string,
+  ) {
+    const pageNumber = parseInt(page, 10) || 1;
+    const limitNumber = parseInt(limit, 10) || 10;
+    return await this.projectService.getIssuesHistory(
+      projectId,
+      pageNumber,
+      limitNumber,
+      issueId,
     );
   }
 }
