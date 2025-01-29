@@ -11,6 +11,7 @@ import { join } from "path";
 import { IssueModule } from "./modules/issue/v1/issue.module";
 import { OrderModule } from "./modules/order/v1/order.module";
 import { ConfigModule } from '@nestjs/config';
+import { UniversalModule } from "./modules/universal/v1/universal.module";
 
 
 @Module({
@@ -30,6 +31,7 @@ import { ConfigModule } from '@nestjs/config';
     ProjectModule,
     IssueModule,
     OrderModule,
+    UniversalModule
   ],
   controllers: [AppController],
   providers: [AppService],

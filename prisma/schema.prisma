@@ -27,6 +27,7 @@ model User {
   projects          Project[]
   Issue             Issue[]
   Order             Order[]
+  IssueHistory      IssueHistory[]
 }
 
 model Role {
@@ -81,6 +82,7 @@ model Project {
   status      String
   startDate   DateTime?
   endDate     DateTime?
+  companyName String?
   archived    Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -100,19 +102,20 @@ model File {
 }
 
 model Issue {
-  id          String      @id @default(uuid()) @db.Uuid
-  projectId   String      @db.Uuid
-  userId      String      @db.Uuid
-  title       String
-  description String?
-  status      String
-  startDate   DateTime?
-  endDate     DateTime?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  issueFiles  IssueFile[]
+  id           String         @id @default(uuid()) @db.Uuid
+  projectId    String         @db.Uuid
+  userId       String         @db.Uuid
+  title        String
+  description  String?
+  status       String
+  startDate    DateTime?
+  endDate      DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  project      Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  issueFiles   IssueFile[]
+  IssueHistory IssueHistory[]
 }
 
 model IssueFile {
@@ -124,21 +127,34 @@ model IssueFile {
   issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
 }
 
+model IssueHistory {
+  id        String   @id @default(uuid()) @db.Uuid
+  issueId   String   @db.Uuid
+  userId    String   @db.Uuid
+  fieldName String // Name of the field that was changed (e.g., "status", "description")
+  oldValue  String? // Previous value of the field
+  newValue  String? // New value of the field
+  createdAt DateTime @default(now())
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 model Order {
-  id          String      @id @default(uuid()) @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
   name        String
   description String?
   location    String?
   status      String
   price       Float?
-  startDate   DateTime?
-  endDate     DateTime?
-  archived    Boolean     @default(false)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  userId      String      @db.Uuid
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  files       OrderFile[]
+  companyName String?
+  startDate DateTime?
+  endDate   DateTime?
+  archived  Boolean     @default(false)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  userId    String      @db.Uuid
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files     OrderFile[]
 }
 
 model OrderFile {

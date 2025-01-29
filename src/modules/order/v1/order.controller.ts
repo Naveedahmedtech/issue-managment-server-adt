@@ -61,21 +61,17 @@ export class OrderController {
 
   @Patch(":orderId/toggle-archive")
   @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
-  async toggleArchiveProject(
-    @Param("orderId") orderId: string,
-  ) {
+  async toggleArchiveProject(@Param("orderId") orderId: string) {
     return await this.orderService.toggleArchiveOrder(orderId);
   }
 
   @Get()
   @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
-  async getAllProjects(
-    // @Query("page") page: string,
-    // @Query("limit") limit: string,
-  ) {
+  async getAllProjects() // @Query("page") page: string,
+  // @Query("limit") limit: string,
+  {
     // const pageNumber = parseInt(page, 10) || 1;
     // const limitNumber = parseInt(limit, 10) || 10;
-
     // return this.orderService.getProjects(pageNumber, limitNumber);
   }
 
@@ -126,13 +122,25 @@ export class OrderController {
 
   @Get("dashboard/recent")
   @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
-  async getRecentProjects(
+  async getOrdersProjects(
     @Query("page") page: string,
     @Query("limit") limit: string,
+    @Query("search") search: string,
+    @Query("sortOrder") sortOrder: "asc" | "desc",
+    @Query("status") status: string,
+    @Query("endDate") endDate: string,
+    @Query("startDate") startDate: string,
   ) {
     const pageNumber = parseInt(page, 10) || 1;
     const limitNumber = parseInt(limit, 10) || 10;
-    return await this.orderService.getRecentOrders(pageNumber, limitNumber);
+    return await this.orderService.getRecentOrders(
+      pageNumber,
+      limitNumber,
+      search,
+      status,
+      startDate,
+      endDate,
+      sortOrder,
+    );
   }
-
 }

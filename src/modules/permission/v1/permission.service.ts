@@ -21,7 +21,7 @@ export class PermissionService {
                 data: createdPermissions,
             };
         } catch (error) {
-            this.logger.error('Failed to create permissions in bulk', error.stack);
+            this.logger.error('Failed to create permissions in bulk', error);
             throw error;
         }
     }
@@ -36,7 +36,7 @@ export class PermissionService {
                 data: permissions,
             };
         } catch (error) {
-            this.logger.error('Failed to fetch permissions', error.stack);
+            this.logger.error('Failed to fetch permissions', error);
             throw error;
         }
     }
@@ -56,7 +56,7 @@ export class PermissionService {
                 data: permission,
             };
         } catch (error) {
-            this.logger.error(`Failed to fetch permission with ID ${id}`, error.stack);
+            this.logger.error(`Failed to fetch permission with ID ${id}`, error);
             throw error;
         }
     }
@@ -70,7 +70,7 @@ export class PermissionService {
                 data: permission,
             };
         } catch (error) {
-            this.logger.error(`Failed to create permission: ${data.action}`, error.stack);
+            this.logger.error(`Failed to create permission: ${data.action}`, error);
             throw error;
         }
     }
@@ -87,7 +87,7 @@ export class PermissionService {
                 data: permission,
             };
         } catch (error) {
-            this.logger.error(`Failed to update permission with ID ${id}`, error.stack);
+            this.logger.error(`Failed to update permission with ID ${id}`, error);
             throw error;
         }
     }
@@ -103,7 +103,7 @@ export class PermissionService {
                 data: null,
             };
         } catch (error) {
-            this.logger.error(`Failed to delete permission with ID ${id}`, error.stack);
+            this.logger.error(`Failed to delete permission with ID ${id}`, error);
             throw error;
         }
     }

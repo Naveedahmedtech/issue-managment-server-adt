@@ -32,6 +32,7 @@ export class OrderService {
           description: req.body.description,
           location: req.body.location,
           status: req.body.status,
+          companyName: req.body.companyName,
           startDate: new Date(req.body.startDate),
           endDate: new Date(req.body.endDate),
           userId,
@@ -52,7 +53,7 @@ export class OrderService {
       this.logger.log(`order created successfully: ${newOrder.id}`);
       return { message: "order created successfully", data: newOrder };
     } catch (error) {
-      this.logger.error("Failed to create order", error.stack);
+      this.logger.error("Failed to create order", error);
 
       if (files && files.length > 0) {
         for (const file of files) {
@@ -84,6 +85,7 @@ export class OrderService {
           price: parseFloat(normalizedBody.price),
         }),
         ...(normalizedBody.location && { location: normalizedBody.location }),
+        ...(normalizedBody.companyName && { companyName: normalizedBody.companyName }),
         ...(normalizedBody.description && {
           description: normalizedBody.description,
         }),
@@ -153,7 +155,7 @@ export class OrderService {
       };
     } catch (error) {
       // Error handling with cleanup for newly uploaded files
-      this.logger.error("Failed to update order", error.stack);
+      this.logger.error("Failed to update order", error);
 
       if (files && files.length > 0) {
         for (const file of files) {
@@ -220,10 +222,7 @@ export class OrderService {
         uploadedFiles: newFiles.length,
       };
     } catch (error) {
-      this.logger.error(
-        `Failed to upload files to order: ${orderId}`,
-        error.stack,
-      );
+      this.logger.error(`Failed to upload files to order: ${orderId}`, error);
 
       // Cleanup uploaded files on error
       if (files && files.length > 0) {
@@ -266,7 +265,7 @@ export class OrderService {
         data: response,
       };
     } catch (error) {
-      this.logger.error("Failed to fetch orders", error.stack);
+      this.logger.error("Failed to fetch orders", error);
       throw error;
     }
   }
@@ -302,7 +301,7 @@ export class OrderService {
         data: response,
       };
     } catch (error) {
-      this.logger.error("Failed to fetch orders", error.stack);
+      this.logger.error("Failed to fetch orders", error);
       throw error;
     }
   }
@@ -333,10 +332,7 @@ export class OrderService {
         data: order,
       };
     } catch (error) {
-      this.logger.error(
-        `Failed to fetch order with id ${orderId}`,
-        error.stack,
-      );
+      this.logger.error(`Failed to fetch order with id ${orderId}`, error);
       throw error;
     }
   }
@@ -366,7 +362,7 @@ export class OrderService {
       // Delete project files from the file system
       for (const file of files) {
         try {
-          await unlink(join("./uploads/orders", file.filePath));
+          await unlink(join("./", file.filePath));
           this.logger.log(`Deleted file from disk: ${file.filePath}`);
         } catch (err) {
           this.logger.error(
@@ -393,7 +389,7 @@ export class OrderService {
       this.logger.log(`Order deleted successfully: ${orderId}`);
       return { message: "Order deleted successfully" };
     } catch (error) {
-      this.logger.error(`Failed to delete order: ${orderId}`, error.stack);
+      this.logger.error(`Failed to delete order: ${orderId}`, error);
       throw error;
     }
   }
@@ -434,25 +430,59 @@ export class OrderService {
         },
       };
     } catch (error) {
-      this.logger.error("Failed to retrieve project statistics", error.stack);
+      this.logger.error("Failed to retrieve project statistics", error);
       throw error;
     }
   }
 
-  async getRecentOrders(page: number = 1, limit: number = 10) {
+  async getRecentOrders(
+    page: number = 1,
+    limit: number = 10,
+    search?: string,
+    status?: string,
+    startDate?: string,
+    endDate?: string,
+    sortOrder: "asc" | "desc" = "desc",
+  ) {
     try {
       // Calculate offset for pagination
       const offset = (page - 1) * limit;
+
+      // Build dynamic where clause
+      const where: any = {
+        archived: false, // Only include non-archived projects
+      };
+
+      if (search) {
+        where.name = {
+          contains: search, // Case-insensitive search for title
+          mode: "insensitive",
+        };
+      }
+
+      if (status) {
+        where.status = status?.toUpperCase(); // Filter by exact status
+      }
+
+      if (startDate) {
+        where.startDate = {
+          gte: new Date(startDate), // Start date should be greater than or equal to the provided date
+        };
+      }
+
+      if (endDate) {
+        where.endDate = {
+          lte: new Date(endDate), // End date should be less than or equal to the provided date
+        };
+      }
 
       // Fetch recent orders, ordered by creation date (most recent first)
       const recentOrders = await this.prisma.order.findMany({
         skip: offset,
         take: limit,
-        where: {
-          archived: false,
-        },
+        where,
         orderBy: {
-          createdAt: "desc",
+          createdAt: sortOrder,
         },
         select: {
           id: true,
@@ -469,7 +499,7 @@ export class OrderService {
       });
 
       // Fetch the total project count for pagination
-      const totalOrders = await this.prisma.project.count();
+      const totalOrders = await this.prisma.order.count();
 
       // Return the response
       return {
@@ -483,7 +513,7 @@ export class OrderService {
         },
       };
     } catch (error) {
-      this.logger.error("Failed to fetch recent orders", error.stack);
+      this.logger.error("Failed to fetch recent orders", error);
       throw error;
     }
   }
@@ -519,10 +549,7 @@ export class OrderService {
         data: updatedOrder,
       };
     } catch (error) {
-      this.logger.error(
-        "Failed to toggle archive state for order",
-        error.stack,
-      );
+      this.logger.error("Failed to toggle archive state for order", error);
       throw error;
     }
   }
@@ -563,7 +590,7 @@ export class OrderService {
         data: response,
       };
     } catch (error) {
-      this.logger.error("Failed to fetch orders", error.stack);
+      this.logger.error("Failed to fetch orders", error);
       throw error;
     }
   }

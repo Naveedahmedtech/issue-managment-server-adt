@@ -10,9 +10,9 @@ import { join } from "path";
 import { unlink } from "fs/promises";
 import { PrismaService } from "src/utils/prisma.service";
 import { posix as pathPosix } from "path";
-import { normalizeKeys } from "src/utils/common";
 import * as PDFDocument from "pdfkit";
 import * as path from "path";
+import { promises as fs } from "fs";
 
 @Injectable()
 export class ProjectService {
@@ -23,18 +23,19 @@ export class ProjectService {
   async createProject(
     req: Request & { userDetails?: User },
     files: Array<Express.Multer.File>,
+    body,
   ) {
     try {
       const { id: userId } = req.userDetails;
 
       const newProject = await this.prisma.project.create({
         data: {
-          title: req.body.title,
-          description: req.body.description,
-          status: req.body.status,
-          startDate:
-            req.body.startDate === "" ? null : new Date(req.body.startDate),
-          endDate: req.body.endDate === "" ? null : new Date(req.body.endDate),
+          title: body.title,
+          description: body.description,
+          status: body.status,
+          companyName: body.companyName,
+          startDate: !body.startDate ? null : new Date(body.startDate),
+          endDate: !body.endDate ? null : new Date(body.endDate),
           userId,
         },
       });
@@ -53,7 +54,7 @@ export class ProjectService {
       this.logger.log(`Project created successfully: ${newProject.id}`);
       return { message: "Project created successfully", data: newProject };
     } catch (error) {
-      this.logger.error("Failed to create project", error.stack);
+      this.logger.error("Failed to create project", error);
 
       if (files && files.length > 0) {
         for (const file of files) {
@@ -74,30 +75,25 @@ export class ProjectService {
     projectId: string,
     req: Request & { userDetails?: User },
     files: Array<Express.Multer.File>,
+    data: any,
   ) {
     try {
-      const normalizedBody = normalizeKeys(req.body) as any;
       const { id: userId } = req.userDetails;
 
       // Build update data
       const updateData: any = {
-        ...(normalizedBody.title && { title: normalizedBody.title }),
-        ...(normalizedBody.description && {
-          description: normalizedBody.description,
+        ...(data.title && { title: data.title }),
+        ...(data.description && {
+          description: data.description,
         }),
-        ...(normalizedBody.status && { status: normalizedBody.status }),
-        ...(normalizedBody.startDate && {
-          startDate:
-            normalizedBody.startDate === ""
-              ? null
-              : new Date(normalizedBody.startDate),
+        ...(data.status && { status: data.status }),
+        ...(data.startDate && {
+          startDate: !data.startDate ? null : new Date(data.startDate),
         }),
-        ...(normalizedBody.endDate && {
-          endDate:
-            normalizedBody.endDate === ""
-              ? null
-              : new Date(normalizedBody.endDate),
+        ...(data.endDate && {
+          endDate: !data.endDate ? null : new Date(data.endDate),
         }),
+        ...(data.companyName && { companyName: data.companyName }),
         userId,
       };
 
@@ -158,7 +154,10 @@ export class ProjectService {
       };
     } catch (error) {
       // Error handling with cleanup for newly uploaded files
-      this.logger.error("Failed to update project", error.stack);
+      this.logger.error("Failed to update project", {
+        message: error.message,
+        stack: error,
+      });
 
       if (files && files.length > 0) {
         for (const file of files) {
@@ -240,7 +239,7 @@ export class ProjectService {
     } catch (error) {
       this.logger.error(
         `Failed to upload files to project: ${projectId}`,
-        error.stack,
+        error,
       );
 
       // Cleanup uploaded files on error
@@ -284,7 +283,7 @@ export class ProjectService {
         data: response,
       };
     } catch (error) {
-      this.logger.error("Failed to fetch projects", error.stack);
+      this.logger.error("Failed to fetch projects", error);
       throw error;
     }
   }
@@ -298,7 +297,7 @@ export class ProjectService {
         skip: offset,
         take: limit,
         where: {
-          archived: false
+          archived: false,
         },
         orderBy: { createdAt: "desc" },
         select: {
@@ -320,7 +319,7 @@ export class ProjectService {
         data: response,
       };
     } catch (error) {
-      this.logger.error("Failed to fetch projects", error.stack);
+      this.logger.error("Failed to fetch projects", error);
       throw error;
     }
   }
@@ -339,6 +338,12 @@ export class ProjectService {
               updatedAt: true,
             },
           },
+          user: {
+            select: {
+              email: true,
+              displayName: true,
+            },
+          },
         },
       });
 
@@ -351,10 +356,7 @@ export class ProjectService {
         data: project,
       };
     } catch (error) {
-      this.logger.error(
-        `Failed to fetch project with id ${projectId}`,
-        error.stack,
-      );
+      this.logger.error(`Failed to fetch project with id ${projectId}`, error);
       throw error;
     }
   }
@@ -372,6 +374,12 @@ export class ProjectService {
             select: {
               id: true,
               filePath: true,
+            },
+          },
+          user: {
+            select: {
+              email: true,
+              displayName: true,
             },
           },
         },
@@ -392,6 +400,10 @@ export class ProjectService {
           description: issue.description,
           status: issue.status,
           startDate: issue.startDate,
+          user: {
+            email: issue.user.email,
+            displayName: issue.user.displayName,
+          },
           endDate: issue.endDate,
           files: issue.issueFiles.map((file) => ({
             name: file.filePath.split("/").pop(),
@@ -423,12 +435,12 @@ export class ProjectService {
 
       return {
         message: "Project issues retrieved successfully!",
-        data: columns,
+        data: { issues, columns },
       };
     } catch (error) {
       this.logger.error(
         `Failed to fetch issues for project with id ${projectId}`,
-        error.stack,
+        error,
       );
       throw error;
     }
@@ -440,46 +452,19 @@ export class ProjectService {
     limit: number = 1000,
   ) {
     try {
-      // const offset = (page - 1) * limit;
-
-      // Get total counts for projectFiles and issueFiles
-      const projectFilesCount = await this.prisma.file.count({
-        where: { projectId },
-      });
-
-      const issueFilesCount = await this.prisma.issueFile.count({
-        where: { issue: { projectId } },
-      });
-
-      // Fetch project files with pagination
+      // Fetch files from the database
       const projectFiles = await this.prisma.file.findMany({
         where: { projectId },
-        // skip: offset,
-        // take: limit,
         orderBy: {
-          createdAt: "desc",
-        },
-        select: {
-          id: true,
-          filePath: true,
-          createdAt: true,
-          updatedAt: true,
+          updatedAt: "desc",
         },
       });
-
-      // Fetch issue files with pagination
       const issueFiles = await this.prisma.issueFile.findMany({
         where: { issue: { projectId } },
-        // skip: offset,
-        // take: limit,
         orderBy: {
-          createdAt: "desc",
+          updatedAt: "desc",
         },
-        select: {
-          id: true,
-          filePath: true,
-          createdAt: true,
-          updatedAt: true,
+        include: {
           issue: {
             select: {
               id: true,
@@ -489,42 +474,59 @@ export class ProjectService {
         },
       });
 
-      // Combine files
+      // Combine and validate file existence
+      const validateFileExists = async (file) => {
+        const filePath = path.join("./", file.filePath);
+        try {
+          await fs.access(filePath); // Check if the file exists
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
       const files = [
-        ...projectFiles.map((file) => ({
-          ...file,
-          type: "projectFile",
-          issue: null,
-        })),
-        ...issueFiles.map((file) => ({
-          ...file,
-          type: "issueFile",
-          issue: {
-            id: file.issue.id,
-            title: file.issue.title,
-          },
-        })),
+        ...(
+          await Promise.all(
+            projectFiles.map(async (file) =>
+              (await validateFileExists(file))
+                ? { ...file, type: "projectFile", issue: null }
+                : null,
+            ),
+          )
+        ).filter(Boolean), // Filter out null entries
+        ...(
+          await Promise.all(
+            issueFiles.map(async (file) =>
+              (await validateFileExists(file))
+                ? {
+                    ...file,
+                    type: "issueFile",
+                    issue: { id: file.issue.id, title: file.issue.title },
+                  }
+                : null,
+            ),
+          )
+        ).filter(Boolean),
       ];
 
-      // Calculate total files and total pages
-      const totalFiles = projectFilesCount + issueFilesCount;
+      // Calculate pagination
+      const totalFiles = files.length;
       const totalPages = Math.ceil(totalFiles / limit);
-
-      // Response
-      const response = {
-        total: totalFiles,
-        page,
-        limit,
-        totalPages,
-        files,
-      };
+      const paginatedFiles = files.slice((page - 1) * limit, page * limit);
 
       return {
         message: "Files retrieved successfully!",
-        data: response,
+        data: {
+          total: totalFiles,
+          page,
+          limit,
+          totalPages,
+          files: paginatedFiles,
+        },
       };
     } catch (error) {
-      this.logger.error("Failed to fetch project files", error.stack);
+      this.logger.error("Failed to fetch project files", error);
       throw error;
     }
   }
@@ -557,7 +559,7 @@ export class ProjectService {
       // Delete project files from the file system
       for (const file of files) {
         try {
-          await unlink(join("./uploads/projects", file.filePath));
+          await unlink(join("./", file.filePath));
           this.logger.log(`Deleted file from disk: ${file.filePath}`);
         } catch (err) {
           this.logger.error(
@@ -584,7 +586,7 @@ export class ProjectService {
       this.logger.log(`Project deleted successfully: ${projectId}`);
       return { message: "Project deleted successfully" };
     } catch (error) {
-      this.logger.error(`Failed to delete project: ${projectId}`, error.stack);
+      this.logger.error(`Failed to delete project: ${projectId}`, error);
       throw error;
     }
   }
@@ -621,25 +623,59 @@ export class ProjectService {
         },
       };
     } catch (error) {
-      this.logger.error("Failed to retrieve project statistics", error.stack);
+      this.logger.error("Failed to retrieve project statistics", error);
       throw error;
     }
   }
 
-  async getRecentProjects(page: number = 1, limit: number = 10) {
+  async getRecentProjects(
+    page: number = 1,
+    limit: number = 10,
+    search?: string,
+    status?: string,
+    startDate?: string,
+    endDate?: string,
+    sortOrder: "asc" | "desc" = "desc",
+  ) {
     try {
       // Calculate offset for pagination
       const offset = (page - 1) * limit;
 
-      // Fetch recent projects, ordered by creation date (most recent first)
+      // Build dynamic where clause
+      const where: any = {
+        archived: false, // Only include non-archived projects
+      };
+
+      if (search) {
+        where.title = {
+          contains: search, // Case-insensitive search for title
+          mode: "insensitive",
+        };
+      }
+
+      if (status) {
+        where.status = status?.toUpperCase(); // Filter by exact status
+      }
+
+      if (startDate) {
+        where.startDate = {
+          gte: new Date(startDate), // Start date should be greater than or equal to the provided date
+        };
+      }
+
+      if (endDate) {
+        where.endDate = {
+          lte: new Date(endDate), // End date should be less than or equal to the provided date
+        };
+      }
+
+      // Fetch recent projects with applied filters and sorting
       const recentProjects = await this.prisma.project.findMany({
         skip: offset,
         take: limit,
-        where: {
-          archived: false
-        },
+        where,
         orderBy: {
-          createdAt: "desc",
+          createdAt: sortOrder, // Sort by createdAt (asc or desc)
         },
         select: {
           id: true,
@@ -653,8 +689,10 @@ export class ProjectService {
         },
       });
 
-      // Fetch the total project count for pagination
-      const totalProjects = await this.prisma.project.count();
+      // Fetch the total project count with the same filters
+      const totalProjects = await this.prisma.project.count({
+        where,
+      });
 
       // Return the response
       return {
@@ -668,7 +706,7 @@ export class ProjectService {
         },
       };
     } catch (error) {
-      this.logger.error("Failed to fetch recent projects", error.stack);
+      this.logger.error("Failed to fetch recent projects", error);
       throw error;
     }
   }
@@ -896,7 +934,7 @@ export class ProjectService {
 
       // Determine the context: project or issue
       const fileContext = projectId ? "project" : "issue";
-
+      console.log("fileContext", fileContext);
       // Find the file in the database
       let existingFile;
       if (fileContext === "project") {
@@ -916,25 +954,23 @@ export class ProjectService {
       }
 
       // Unlink the existing file from the server
-      const existingFilePath = join(
-        "./uploads",
-        fileContext === "project" ? "projects" : "issues",
-        pathPosix.basename(existingFile.filePath),
-      );
-      try {
-        await unlink(existingFilePath);
-        this.logger.log(`Unlinked existing file: ${existingFilePath}`);
-      } catch (unlinkError) {
-        this.logger.error(
-          `Failed to unlink file: ${existingFilePath}`,
-          unlinkError,
-        );
-      }
+      // const existingFilePath = join(
+      //   "./", existingFile.filePath,
+      // );
+      // try {
+      //   await unlink(existingFilePath);
+      //   this.logger.log(`Unlinked existing file: ${existingFilePath}`);
+      // } catch (unlinkError) {
+      //   this.logger.error(
+      //     `Failed to unlink file: ${existingFilePath}`,
+      //     unlinkError,
+      //   );
+      // }
 
       // Construct the new file path
       const newFilePath = pathPosix.join(
         "uploads",
-        "updatedFiles",
+        "projects",
         files[0].filename,
       );
 
@@ -960,7 +996,7 @@ export class ProjectService {
         updatedFilePath: newFilePath,
       };
     } catch (error) {
-      this.logger.error("Failed to update file", error.stack);
+      this.logger.error("Failed to update file", error);
       throw error;
     }
   }
@@ -988,7 +1024,7 @@ export class ProjectService {
       );
 
       // Send the file to the user
-      return { 
+      return {
         message: "DOWNLOAD_FILE",
         data: { filePath },
       };
@@ -996,9 +1032,7 @@ export class ProjectService {
       this.logger.error(`Error downloading file: ${error.message}`);
       throw error;
     }
-  } 
-
-
+  }
 
   async toggleArchiveProject(projectId: string) {
     try {
@@ -1006,33 +1040,36 @@ export class ProjectService {
       const project = await this.prisma.project.findUnique({
         where: { id: projectId },
       });
-  
+
       if (!project) {
         throw new NotFoundException("Project not found!");
       }
-  
+
       // Toggle the archived state
       const newArchivedState = !project.archived;
-  
+
       const updatedProject = await this.prisma.project.update({
         where: { id: projectId },
         data: {
           archived: newArchivedState, // Toggle the state
         },
       });
-  
+
       this.logger.log(
         `Project ${newArchivedState ? "archived" : "unarchived"} successfully: ${
           updatedProject.id
-        }`
+        }`,
       );
-  
+
       return {
         message: `Project ${newArchivedState ? "archived" : "unarchived"} successfully`,
         data: updatedProject,
       };
     } catch (error) {
-      this.logger.error("Failed to toggle archive state for project", error.stack);
+      this.logger.error("Failed to toggle archive state for project", {
+        message: error.message,
+        stack: error,
+      });
       throw error;
     }
   }
@@ -1046,7 +1083,7 @@ export class ProjectService {
         skip: offset,
         take: limit,
         where: {
-          archived: true
+          archived: true,
         },
         orderBy: { createdAt: "desc" },
         select: {
@@ -1074,9 +1111,122 @@ export class ProjectService {
         data: response,
       };
     } catch (error) {
-      this.logger.error("Failed to fetch projects", error.stack);
+      this.logger.error("Failed to fetch projects", error);
       throw error;
     }
   }
 
+  // ** LOG HISTORY FOR ISSUE TASKS
+  async updateIssueLogHistory(
+    req: Request & { userDetails?: User },
+    issueId: string,
+    updateData: Array<{
+      fieldName: string;
+      oldValue: string | null;
+      newValue: string | null;
+    }>,
+  ) {
+    const { id: userId } = req.userDetails;
+
+    try {
+      if (!Array.isArray(updateData) || updateData.length === 0) {
+        throw new BadRequestException("Invalid or empty updateData array.");
+      }
+
+      // Validate each change
+      const validChanges = updateData.filter(
+        (change) =>
+          change.fieldName &&
+          change.oldValue !== undefined &&
+          change.newValue !== undefined,
+      );
+
+      if (validChanges.length === 0) {
+        throw new BadRequestException(
+          "No valid changes provided in updateData.",
+        );
+      }
+
+      // Log all valid changes
+      await this.prisma.issueHistory.createMany({
+        data: validChanges.map((change) => ({
+          issueId,
+          userId,
+          fieldName: change.fieldName,
+          oldValue: change.oldValue,
+          newValue: change.newValue,
+        })),
+      });
+
+      return {
+        message: `${validChanges.length} change(s) logged successfully`,
+        data: validChanges,
+      };
+    } catch (error) {
+      console.error("Failed to log issue history:", error);
+      throw error;
+    }
+  }
+
+  async getIssuesHistory(
+    projectId: string,
+    page: number = 1,
+    limit: number = 10,
+    issueId?: string,
+  ) {
+    try {
+      const offset = (page - 1) * limit;
+
+      // Build the base `where` clause
+      const whereClause: any = {
+        issue: {
+          projectId: projectId,
+        },
+      };
+
+      // Add issueId to the `where` clause if provided
+      if (issueId) {
+        whereClause.issue.id = issueId;
+      }
+
+      // Fetch the issue history logs for the given projectId or issueId
+      const history = await this.prisma.issueHistory.findMany({
+        where: whereClause,
+        orderBy: {
+          createdAt: "desc", // Order by latest logs
+        },
+        skip: offset,
+        take: limit,
+        include: {
+          user: {
+            select: {
+              email: true,
+              displayName: true,
+            },
+          },
+        },
+      });
+
+      // Count total history logs for the project or specific issue
+      const totalHistory = await this.prisma.issueHistory.count({
+        where: whereClause,
+      });
+
+      const response = {
+        total: totalHistory,
+        page,
+        limit,
+        totalPages: Math.ceil(totalHistory / limit),
+        history,
+      };
+
+      return {
+        message: "Issue history fetched successfully",
+        data: response,
+      };
+    } catch (error) {
+      this.logger.error("Failed to fetch issue history logs", error);
+      throw error;
+    }
+  }
 }
