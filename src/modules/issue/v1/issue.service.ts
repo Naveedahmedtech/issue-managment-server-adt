@@ -24,51 +24,33 @@ export class IssueService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createIssue(
-    req: Request & { userDetails?: User },
-    files: Array<Express.Multer.File>,
+    data: {
+      title: string;
+      description: string;
+      status: string;
+      startDate: string;
+      endDate: string;
+      projectId: string;
+      userId: string;
+    }
   ) {
     try {
-      const { id: userId } = req.userDetails;
-
       const newIssue = await this.prisma.issue.create({
         data: {
-          title: req.body.title,
-          description: req.body.description,
-          status: req.body?.status?.toUpperCase(),
-          startDate: req.body.startDate ? new Date(req.body.startDate) : null,
-          endDate: req.body.endDate ? new Date(req.body.endDate) : null,
-          projectId: req.body.projectId,
-          userId,
+          title: data.title,
+          description: data?.description,
+          status: data.status.toUpperCase(),
+          startDate: data.startDate ? new Date(data.startDate) : null,
+          endDate: data.endDate ? new Date(data.endDate) : null,
+          projectId: data.projectId,
+          userId: data.userId,
         },
       });
-
-      if (files && files.length > 0) {
-        for (const file of files) {
-          await this.prisma.issueFile.create({
-            data: {
-              issueId: newIssue.id,
-              filePath: pathPosix.join("uploads", "issues", file.filename),
-            },
-          });
-        }
-      }
 
       this.logger.log(`issue created successfully: ${newIssue.id}`);
       return { message: "issue created successfully", data: newIssue };
     } catch (error) {
       this.logger.error("Failed to create issue", error);
-
-      if (files && files.length > 0) {
-        for (const file of files) {
-          try {
-            await unlink(join("./uploads/issues", file.filename));
-            this.logger.log(`Deleted file: ${file.filename}`);
-          } catch (err) {
-            this.logger.error(`Failed to delete file: ${file.filename}`, err);
-          }
-        }
-      }
-
       throw error;
     }
   }
