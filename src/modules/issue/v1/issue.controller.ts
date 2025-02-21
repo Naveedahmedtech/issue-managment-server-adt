@@ -16,14 +16,14 @@ import { FileUploadInterceptor } from "src/interceptor/file-upload.interceptor";
 import { RolesAndPermissions } from "src/utils/roleAndPermission.decorator";
 import { PERMISSIONS, ROLES } from "src/constants/roles-permissions.constants";
 
-
 @Controller({ path: "issue", version: "1" })
 export class IssueController {
   constructor(private readonly issueService: IssueService) {}
 
   @Post("create")
   async createIssue(
-    @Body() data: {
+    @Body()
+    data: {
       title: string;
       description: string;
       status: string;
@@ -39,7 +39,10 @@ export class IssueController {
   @UseGuards(AuthGuard)
   @Put(":id")
   @FileUploadInterceptor("./uploads/issues", 10)
-  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER], [PERMISSIONS.ISSUE.EDIT])
+  @RolesAndPermissions(
+    [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
+    [PERMISSIONS.ISSUE.EDIT],
+  )
   async updateIssue(
     @Param("id") id: string,
     @Req() req: Request,
@@ -47,6 +50,27 @@ export class IssueController {
     @UploadedFiles() files: Array<Express.Multer.File>,
   ) {
     return await this.issueService.updateIssue(id, req, files);
+  }
+
+  @UseGuards(AuthGuard)
+  @Post(":issueId/assign-to-user")
+  @RolesAndPermissions(
+    [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
+    [PERMISSIONS.ISSUE.EDIT],
+  )
+  async assignIssues(@Param("issueId") issueId: string, @Body() data: any) {
+    const { userIds } = data;
+    return await this.issueService.assignUsersToIssue(issueId, userIds);
+  }
+
+  @UseGuards(AuthGuard)
+  @Delete(":issueId/remove-user/:userId")
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
+  async removeUsersFromIssue(
+    @Param("issueId") issueId: string,
+    @Param("userId") userId: string,
+  ) {
+    return await this.issueService.removeUserFromIssue(issueId, userId);
   }
 
   @UseGuards(AuthGuard)

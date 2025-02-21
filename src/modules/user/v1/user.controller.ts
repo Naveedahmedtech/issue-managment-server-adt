@@ -25,11 +25,12 @@ export class UserController {
   async getAllUsers(
     @Query("page") page: string,
     @Query("limit") limit: string,
+    @Query("roleName") roleName: string,
     // @Req() req: Request
   ) {
     const pageNumber = parseInt(page, 10) || 1;
     const limitNumber = parseInt(limit, 10) || 10;
-    return await this.userService.getAllUsers(pageNumber, limitNumber);
+    return await this.userService.getAllUsers(pageNumber, limitNumber, roleName);
   }
 
   @Get("azure/login")

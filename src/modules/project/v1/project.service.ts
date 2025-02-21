@@ -382,13 +382,29 @@ export class ProjectService {
               displayName: true,
             },
           },
+          project: {
+            select: {
+              id: true,
+              archived: true,
+            },
+          },
+          assignedUsers: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  displayName: true,
+                },
+              },
+            },
+          },
         },
       });
 
       // Initialize the columns with the required order
       const columns = [
-        { id: "column-1", name: "To Do", tasks: [] },
-        { id: "column-2", name: "In Progress", tasks: [] },
+        { id: "column-1", name: "Active", tasks: [] },
+        { id: "column-2", name: "On Going", tasks: [] },
         { id: "column-3", name: "Completed", tasks: [] },
       ];
 
@@ -404,26 +420,31 @@ export class ProjectService {
             email: issue.user.email,
             displayName: issue.user.displayName,
           },
+          project: {
+            id: issue.project.id,
+            archived: issue.project.archived,
+          },
           endDate: issue.endDate,
           files: issue.issueFiles.map((file) => ({
             name: file.filePath.split("/").pop(),
             type: file.filePath.split(".").pop().toUpperCase(),
             url: file.filePath,
           })),
+          assignedUsers: issue.assignedUsers,
         };
 
         // Normalize the status to lowercase for comparison
         const status = issue.status.toLowerCase();
 
         // Push the task into the correct column based on its status
-        switch (status) {
-          case "to do":
+        switch (status?.toUpperCase()) {
+          case "ACTIVE":
             columns[0].tasks.push(task);
             break;
-          case "in progress":
+          case "ON GOING":
             columns[1].tasks.push(task);
             break;
-          case "completed":
+          case "COMPLETED":
             columns[2].tasks.push(task);
             break;
           default:
@@ -442,6 +463,120 @@ export class ProjectService {
         `Failed to fetch issues for project with id ${projectId}`,
         error,
       );
+      throw error;
+    }
+  }
+
+  async getAllProjectIssues(userId?: string) {
+    try {
+      // Build the query filter dynamically
+      const filter = userId
+        ? {
+            assignedUsers: {
+              some: {
+                userId: userId, // Filters issues where the user is assigned
+              },
+            },
+          }
+        : {};
+
+      // Fetch issues filtered by userId if provided
+      const issues = await this.prisma.issue.findMany({
+        where: filter,
+        orderBy: {
+          createdAt: "desc",
+        },
+        include: {
+          issueFiles: {
+            select: {
+              id: true,
+              filePath: true,
+            },
+          },
+          user: {
+            select: {
+              email: true,
+              displayName: true,
+            },
+          },
+          project: {
+            select: {
+              id: true,
+              archived: true,
+              title: true,
+            },
+          },
+          assignedUsers: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  displayName: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // Initialize columns
+      const columns = [
+        { id: "column-1", name: "Active", tasks: [] },
+        { id: "column-2", name: "On Going", tasks: [] },
+        { id: "column-3", name: "Completed", tasks: [] },
+      ];
+
+      // Iterate through issues and categorize them by status
+      for (const issue of issues) {
+        const task = {
+          id: issue.id,
+          title: issue.title,
+          description: issue.description,
+          status: issue.status,
+          startDate: issue.startDate,
+          user: {
+            email: issue.user.email,
+            displayName: issue.user.displayName,
+          },
+          project: {
+            name: issue.project.title,
+            id: issue.project.id,
+            archived: issue.project.archived,
+          },
+          endDate: issue.endDate,
+          files: issue.issueFiles.map((file) => ({
+            name: file.filePath.split("/").pop(),
+            type: file.filePath.split(".").pop().toUpperCase(),
+            url: file.filePath,
+          })),
+          assignedUsers: issue.assignedUsers,
+        };
+
+        // Normalize status and assign tasks to columns
+        const status = issue.status?.toUpperCase();
+
+        switch (status) {
+          case "ACTIVE":
+            columns[0].tasks.push(task);
+            break;
+          case "ON GOING":
+            columns[1].tasks.push(task);
+            break;
+          case "COMPLETED":
+            columns[2].tasks.push(task);
+            break;
+          default:
+            columns[0].tasks.push(task); // Default to "Active" if status is unknown
+            break;
+        }
+      }
+
+      return {
+        message: "Issues retrieved successfully!",
+        data: { issues, columns },
+      };
+    } catch (error) {
+      this.logger.error(`Failed to fetch issues`, error);
       throw error;
     }
   }

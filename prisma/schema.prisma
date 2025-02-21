@@ -8,26 +8,27 @@ datasource db {
 }
 
 model User {
-  id                String           @id @default(uuid()) @db.Uuid
-  email             String           @unique
+  id                String            @id @default(uuid()) @db.Uuid
+  email             String            @unique
   password          String?
   name              String?
-  azureId           String           @unique
+  azureId           String            @unique
   displayName       String? // Corresponds to 'displayName' in Graph API
   mailNickname      String? // Corresponds to 'mailNickname' in Graph API
   userPrincipalName String? // Corresponds to 'userPrincipalName' in Graph API
   accountEnabled    Boolean? // Corresponds to 'accountEnabled' in Graph API
   deleted_at        DateTime?
-  is_deleted        Boolean          @default(false)
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  roleId            String?          @db.Uuid
-  role              Role?            @relation("UserRole", fields: [roleId], references: [id], onDelete: SetNull)
+  is_deleted        Boolean           @default(false)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  roleId            String?           @db.Uuid
+  role              Role?             @relation("UserRole", fields: [roleId], references: [id], onDelete: SetNull)
   userPermissions   UserPermission[]
   projects          Project[]
   Issue             Issue[]
   Order             Order[]
   IssueHistory      IssueHistory[]
+  assignedUsers     IssueAssignment[]
 }
 
 model Role {
@@ -76,55 +77,76 @@ model UserPermission {
 }
 
 model Project {
-  id          String    @id @default(uuid()) @db.Uuid
+  id          String      @id @default(uuid()) @db.Uuid
   title       String
   description String?
   status      String
   startDate   DateTime?
   endDate     DateTime?
   companyName String?
-  archived    Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  userId      String    @db.Uuid
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  archived    Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  userId      String      @db.Uuid
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   files       File[]
   issues      Issue[]
+  issueFiles  IssueFile[]
 }
 
 model File {
-  id        String   @id @default(uuid()) @db.Uuid
-  projectId String   @db.Uuid
+  id        String      @id @default(uuid()) @db.Uuid
+  projectId String      @db.Uuid
   filePath  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  IssueFile IssueFile[]
 }
 
 model Issue {
-  id           String         @id @default(uuid()) @db.Uuid
-  projectId    String         @db.Uuid
-  userId       String         @db.Uuid
-  title        String
-  description  String?
-  status       String
-  startDate    DateTime?
-  endDate      DateTime?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  project      Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  issueFiles   IssueFile[]
-  IssueHistory IssueHistory[]
+  id            String            @id @default(uuid()) @db.Uuid
+  projectId     String            @db.Uuid
+  userId        String            @db.Uuid
+  title         String
+  description   String?
+  status        String
+  startDate     DateTime?
+  endDate       DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  project       Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  issueFiles    IssueFile[]
+  IssueHistory  IssueHistory[]
+  assignedUsers IssueAssignment[]
 }
 
 model IssueFile {
   id        String   @id @default(uuid()) @db.Uuid
   issueId   String   @db.Uuid
+  fileId    String?  @db.Uuid
   filePath  String
+  projectId String?  @db.Uuid
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  file      File?    @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([issueId, fileId])
+}
+
+model IssueAssignment {
+  id         String   @id @default(uuid()) @db.Uuid
+  issueId    String   @db.Uuid
+  userId     String   @db.Uuid
+  assignedAt DateTime @default(now())
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([issueId, userId]) // Prevents assigning the same user to the same issue multiple times
 }
 
 model IssueHistory {
@@ -140,21 +162,21 @@ model IssueHistory {
 }
 
 model Order {
-  id          String  @id @default(uuid()) @db.Uuid
+  id          String      @id @default(uuid()) @db.Uuid
   name        String
   description String?
   location    String?
   status      String
   price       Float?
   companyName String?
-  startDate DateTime?
-  endDate   DateTime?
-  archived  Boolean     @default(false)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-  userId    String      @db.Uuid
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  files     OrderFile[]
+  startDate   DateTime?
+  endDate     DateTime?
+  archived    Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  userId      String      @db.Uuid
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files       OrderFile[]
 }
 
 model OrderFile {

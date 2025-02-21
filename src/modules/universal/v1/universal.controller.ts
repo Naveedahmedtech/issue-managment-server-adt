@@ -11,9 +11,10 @@ export class UniversalController {
   async updateProject(
     @Param("id") id: string,
     @Query("userId") userId: string,
+    @Query("issueId") issueId: string,
     @UploadedFiles() files: Express.Multer.File,
   ) {
-    const params = { fileId: id, userId };
+    const params = { fileId: id, userId, issueId };
     return await this.universalService.updateFile(params, files);
   }
 }

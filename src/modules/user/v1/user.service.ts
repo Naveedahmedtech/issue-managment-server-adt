@@ -394,32 +394,29 @@ export class UserService {
         message: "User deleted successfully.",
       };
     } catch (error) {
-      this.logger.error(
-        `Failed to delete user with ID: ${userId}`,
-        error,
-      );
+      this.logger.error(`Failed to delete user with ID: ${userId}`, error);
       throw error;
     }
   }
 
-  async getAllUsers(
-    page: number = 1,
-    limit: number = 20,
-    // req: Request & { userDetails?: User },
-  ) {
+  async getAllUsers(page: number = 1, limit: number = 20, roleName?: string) {
     try {
       const skip = (page - 1) * limit;
-      // const currentUserId = req.userDetails?.id;
-
-      // Fetch users, excluding the current logged-in user
+  
+      // Build the where clause conditionally based on roleName     
+      const whereClause = roleName
+        ? {
+            role: {
+              name: roleName,
+            },
+          }
+        : {};
+  
+      // Fetch users, optionally filtering by role name
       const users = await this.prisma.user.findMany({
         skip,
         take: limit,
-        // where: {
-        //   id: {
-        //     not: currentUserId,
-        //   },
-        // },
+        where: whereClause,
         select: {
           id: true,
           email: true,
@@ -455,37 +452,31 @@ export class UserService {
           },
         },
       });
-
-      // Count total users excluding the current user
+  
+      // Count total users, applying the same role name filter if provided
       const totalUsers = await this.prisma.user.count({
-        // where: {
-        //   id: {
-        //     not: currentUserId,
-        //   },
-        // },
+        where: whereClause,
       });
-
+  
       // Format the users' data
       const formattedUsers = users.map((user) => {
         const rolePermissions =
           user.role?.permissions.map((p) => p.permission.action) || [];
         const userPermissions =
           user.userPermissions.map((p) => p.permission.action) || [];
-
+  
         return {
           id: user.id,
           email: user.email,
           name: user.name,
           displayName: user.displayName,
           role: user.role?.name,
-          permissions: Array.from(
-            new Set([...rolePermissions, ...userPermissions]),
-          ),
+          permissions: Array.from(new Set([...rolePermissions, ...userPermissions])),
           createdAt: user.createdAt,
           updatedAt: user.updatedAt,
         };
       });
-
+  
       this.logger.log("Fetched users successfully");
       return {
         message: "Users fetched successfully",
@@ -503,6 +494,7 @@ export class UserService {
       throw error;
     }
   }
+  
 
   async getUserById(id: string) {
     this.logger.log(`Fetching user with ID: ${id}`);
@@ -602,8 +594,9 @@ export class UserService {
       res.cookie("auth_token", customToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: false,
+        sameSite: 'none',
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        path: '/'
       });
 
       // Redirect to the frontend
@@ -645,7 +638,8 @@ export class UserService {
       res.clearCookie("auth_token", {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: false,
+        sameSite: 'none',
+        path: "/"
       });
 
       this.logger.log("User logged out successfully");

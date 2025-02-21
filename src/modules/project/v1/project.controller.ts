@@ -123,7 +123,6 @@ export class ProjectController {
   @FileUploadInterceptor("./uploads/projects", 10) // Upload up to 10 files to the 'projects' directory
   @RolesAndPermissions(
     [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
-    [PERMISSIONS.FILES.UPLOAD_PROJECT],
   )
   async uploadFilesToProject(
     @Req() req: Request,
@@ -161,6 +160,15 @@ export class ProjectController {
     const limitNumber = parseInt(limit, 10) || 10;
 
     return this.projectService.getProjectList(pageNumber, limitNumber);
+  }
+
+  @Get("all-issues")
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
+  async getAllProjectIssues(
+    @Query("userId") userId: string,
+  ) {
+
+    return this.projectService.getAllProjectIssues(userId);
   }
 
   @Get("archived")

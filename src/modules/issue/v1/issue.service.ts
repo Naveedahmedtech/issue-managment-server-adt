@@ -195,4 +195,131 @@ export class IssueService {
       throw error;
     }
   }
+
+
+
+  async assignUsersToIssue(issueId: string, userIds: string[]) {
+    try {
+      // Validate if the issue exists
+      const issue = await this.prisma.issue.findUnique({
+        where: { id: issueId },
+      });
+  
+      if (!issue) {
+        throw new NotFoundException(`Issue with ID ${issueId} does not exist`);
+      }
+  
+      // Fetch currently assigned user IDs for this issue
+      const existingAssignments = await this.prisma.issueAssignment.findMany({
+        where: { issueId },
+        select: { userId: true },
+      });
+  
+      const existingUserIds = existingAssignments.map(assignment => assignment.userId);
+  
+      // Filter out userIds that are already assigned to prevent duplicates
+      const newUserIds = userIds.filter(userId => !existingUserIds.includes(userId));
+  
+      if (newUserIds.length === 0) {
+        return { message: "No new users to assign", data: issue };
+      }
+  
+      // Create assignments for new user IDs
+      const newAssignments = newUserIds.map(userId => ({
+        issueId,
+        userId,
+      }));
+  
+      // Bulk create new assignments
+      await this.prisma.issueAssignment.createMany({
+        data: newAssignments,
+      });
+  
+      this.logger.log(`New users assigned to issue ${issueId} successfully`);
+  
+      // Return the updated list of assigned users
+      const updatedIssue = await this.prisma.issue.findUnique({
+        where: { id: issueId },
+        include: {
+          assignedUsers: {
+            select: {
+              user: {
+                select: {
+                  id: true,
+                  displayName: true,
+                  email: true,
+                },
+              },
+            },
+          },
+        },
+      });
+  
+      return { message: "Users assigned successfully", data: updatedIssue };
+    } catch (error) {
+      this.logger.error(`Failed to assign users to issue ${issueId}`, error);
+      throw error;
+    }
+  }
+
+  
+  async removeUserFromIssue(issueId: string, userId: string) {
+    try {
+      // Validate if the issue exists
+      const issue = await this.prisma.issue.findUnique({
+        where: { id: issueId },
+      });
+  
+      if (!issue) {
+        throw new NotFoundException(`Issue with ID ${issueId} does not exist`);
+      }
+  
+      // Check if the user is assigned to the issue
+      const assignment = await this.prisma.issueAssignment.findFirst({
+        where: {
+          issueId,
+          userId,
+        },
+      });
+  
+      if (!assignment) {
+        throw new NotFoundException(`User with ID ${userId} is not assigned to issue ${issueId}`);
+      }
+  
+      // Remove the user assignment
+      await this.prisma.issueAssignment.delete({
+        where: {
+          id: assignment.id,
+        },
+      });
+  
+      this.logger.log(`User ${userId} removed from issue ${issueId} successfully`);
+  
+      // Return the updated list of assigned users
+      const updatedIssue = await this.prisma.issue.findUnique({
+        where: { id: issueId },
+        include: {
+          assignedUsers: {
+            select: {
+              user: {
+                select: {
+                  id: true,
+                  displayName: true,
+                  email: true,
+                },
+              },
+            },
+          },
+        },
+      });
+  
+      return { message: "User removed successfully", data: updatedIssue };
+    } catch (error) {
+      this.logger.error(`Failed to remove user ${userId} from issue ${issueId}`, error);
+      throw error;
+    }
+  }
+  
+  
+  
 }
