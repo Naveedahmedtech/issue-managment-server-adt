@@ -6,14 +6,15 @@ import { unlink } from "fs/promises";
 import { PrismaService } from "src/utils/prisma.service";
 import { posix as pathPosix } from "path";
 import { normalizeKeys } from "src/utils/common";
+import * as fs from "fs";
+import * as path from "path";
 // import { ROLES } from "src/constants/roles-permissions.constants";
-
 
 export interface ExtendedUser extends User {
   role: {
-      id: string;
-      name: string;
-      permissions: string[];
+    id: string;
+    name: string;
+    permissions: string[];
   };
 }
 
@@ -23,37 +24,76 @@ export class IssueService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async createIssue(
-    data: {
-      title: string;
-      description: string;
-      status: string;
-      startDate: string;
-      endDate: string;
-      projectId: string;
-      userId: string;
-    }
-  ) {
+  async createIssue(data: {
+    title: string;
+    description: string;
+    status: string;
+    startDate: string;
+    endDate: string;
+    projectId: string;
+    userId: string;
+    image?: string;
+  }) {
+    let relativePath: string | null = null;
+  
     try {
+      if (data.image) {
+        // Validate Base64 format
+        const match = data.image.match(/^data:(image\/[a-zA-Z]+);base64,/);
+        if (!match) {
+          throw new Error("Invalid Base64 image string");
+        }
+  
+        const fileType = match[1].split("/")[1]; // Extract file extension (png, jpg, etc.)
+        const base64Data = data.image.replace(/^data:image\/[a-zA-Z]+;base64,/, "");
+  
+        // Generate a unique filename
+        const filename = `issue-${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileType}`;
+  
+        // Define relative and absolute paths
+        relativePath = path.join("uploads/issues", filename);
+        const absolutePath = path.join(__dirname, "../../../../", relativePath);
+  
+        // Ensure directory exists
+        await fs.promises.mkdir(path.dirname(absolutePath), { recursive: true });
+  
+        // Write the file asynchronously
+        await fs.promises.writeFile(absolutePath, base64Data, "base64");
+      }
+  
+      // Create issue without worrying about image
       const newIssue = await this.prisma.issue.create({
         data: {
           title: data.title,
-          description: data?.description,
-          status: data.status.toUpperCase(),
+          description: data.description,
+          status: data.status ? data.status.toUpperCase() : "ACTIVE",
           startDate: data.startDate ? new Date(data.startDate) : null,
           endDate: data.endDate ? new Date(data.endDate) : null,
           projectId: data.projectId,
           userId: data.userId,
         },
       });
-
-      this.logger.log(`issue created successfully: ${newIssue.id}`);
-      return { message: "issue created successfully", data: newIssue };
+  
+      // Save file record **only if image exists**
+      if (relativePath) {
+        await this.prisma.issueFile.create({
+          data: {
+            issueId: newIssue.id,
+            filePath: relativePath.replace(/\\/g, "/"),
+          },
+        });
+        this.logger.log("Issue file is saved!");
+      }
+  
+      this.logger.log(`Issue created successfully: ${newIssue.id}`);
+      return { message: "Issue created successfully", data: newIssue };
     } catch (error) {
       this.logger.error("Failed to create issue", error);
       throw error;
     }
   }
+  
+  
 
   async updateIssue(
     issueId: string,
@@ -170,9 +210,7 @@ export class IssueService {
       // Delete associated files from the file system
       for (const file of existingIssue.issueFiles) {
         try {
-          await unlink(
-            join("./", file.filePath),
-          );
+          await unlink(join("./", file.filePath));
           this.logger.log(`Deleted file from server: ${file.filePath}`);
         } catch (error) {
           this.logger.error(`Failed to delete file: ${file.filePath}`, error);
@@ -196,47 +234,49 @@ export class IssueService {
     }
   }
 
-
-
   async assignUsersToIssue(issueId: string, userIds: string[]) {
     try {
       // Validate if the issue exists
       const issue = await this.prisma.issue.findUnique({
         where: { id: issueId },
       });
-  
+
       if (!issue) {
         throw new NotFoundException(`Issue with ID ${issueId} does not exist`);
       }
-  
+
       // Fetch currently assigned user IDs for this issue
       const existingAssignments = await this.prisma.issueAssignment.findMany({
         where: { issueId },
         select: { userId: true },
       });
-  
-      const existingUserIds = existingAssignments.map(assignment => assignment.userId);
-  
+
+      const existingUserIds = existingAssignments.map(
+        (assignment) => assignment.userId,
+      );
+
       // Filter out userIds that are already assigned to prevent duplicates
-      const newUserIds = userIds.filter(userId => !existingUserIds.includes(userId));
-  
+      const newUserIds = userIds.filter(
+        (userId) => !existingUserIds.includes(userId),
+      );
+
       if (newUserIds.length === 0) {
         return { message: "No new users to assign", data: issue };
       }
-  
+
       // Create assignments for new user IDs
-      const newAssignments = newUserIds.map(userId => ({
+      const newAssignments = newUserIds.map((userId) => ({
         issueId,
         userId,
       }));
-  
+
       // Bulk create new assignments
       await this.prisma.issueAssignment.createMany({
         data: newAssignments,
       });
-  
+
       this.logger.log(`New users assigned to issue ${issueId} successfully`);
-  
+
       // Return the updated list of assigned users
       const updatedIssue = await this.prisma.issue.findUnique({
         where: { id: issueId },
@@ -254,7 +294,7 @@ export class IssueService {
           },
         },
       });
-  
+
       return { message: "Users assigned successfully", data: updatedIssue };
     } catch (error) {
       this.logger.error(`Failed to assign users to issue ${issueId}`, error);
@@ -262,18 +302,17 @@ export class IssueService {
     }
   }
 
-  
   async removeUserFromIssue(issueId: string, userId: string) {
     try {
       // Validate if the issue exists
       const issue = await this.prisma.issue.findUnique({
         where: { id: issueId },
       });
-  
+
       if (!issue) {
         throw new NotFoundException(`Issue with ID ${issueId} does not exist`);
       }
-  
+
       // Check if the user is assigned to the issue
       const assignment = await this.prisma.issueAssignment.findFirst({
         where: {
@@ -281,20 +320,24 @@ export class IssueService {
           userId,
         },
       });
-  
+
       if (!assignment) {
-        throw new NotFoundException(`User with ID ${userId} is not assigned to issue ${issueId}`);
+        throw new NotFoundException(
+          `User with ID ${userId} is not assigned to issue ${issueId}`,
+        );
       }
-  
+
       // Remove the user assignment
       await this.prisma.issueAssignment.delete({
         where: {
           id: assignment.id,
         },
       });
-  
-      this.logger.log(`User ${userId} removed from issue ${issueId} successfully`);
-  
+
+      this.logger.log(
+        `User ${userId} removed from issue ${issueId} successfully`,
+      );
+
       // Return the updated list of assigned users
       const updatedIssue = await this.prisma.issue.findUnique({
         where: { id: issueId },
@@ -312,14 +355,14 @@ export class IssueService {
           },
         },
       });
-  
+
       return { message: "User removed successfully", data: updatedIssue };
     } catch (error) {
-      this.logger.error(`Failed to remove user ${userId} from issue ${issueId}`, error);
+      this.logger.error(
+        `Failed to remove user ${userId} from issue ${issueId}`,
+        error,
+      );
       throw error;
     }
   }
-  
-  
-  
 }

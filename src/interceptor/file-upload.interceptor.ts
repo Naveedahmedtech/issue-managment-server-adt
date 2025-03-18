@@ -14,6 +14,7 @@ export function FileUploadInterceptor(destinationPath: string, maxFiles = 10) {
             callback(null, destinationPath);
           },
           filename: async (req, file, callback) => {
+            console.log(file)
             const fileExtName = extname(file.originalname);
             const fileNameWithoutExt = basename(file.originalname, fileExtName);
 

@@ -31,6 +31,7 @@ export class IssueController {
       endDate: string;
       projectId: string;
       userId: string;
+      image?: string;
     },
   ) {
     return await this.issueService.createIssue(data);
