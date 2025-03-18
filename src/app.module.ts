@@ -12,7 +12,7 @@ import { IssueModule } from "./modules/issue/v1/issue.module";
 import { OrderModule } from "./modules/order/v1/order.module";
 import { ConfigModule } from '@nestjs/config';
 import { UniversalModule } from "./modules/universal/v1/universal.module";
-
+import { CompanyModule } from "./modules/company/v1/company.module";
 
 @Module({
   imports: [
@@ -31,7 +31,8 @@ import { UniversalModule } from "./modules/universal/v1/universal.module";
     ProjectModule,
     IssueModule,
     OrderModule,
-    UniversalModule
+    UniversalModule,
+    CompanyModule
   ],
   controllers: [AppController],
   providers: [AppService],

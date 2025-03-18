@@ -12,6 +12,7 @@ import { PrismaService } from "src/utils/prisma.service";
 import { posix as pathPosix } from "path";
 import { normalizeKeys } from "src/utils/common";
 
+
 @Injectable()
 export class OrderService {
   private readonly logger = new Logger(OrderService.name);
@@ -28,13 +29,13 @@ export class OrderService {
       const newOrder = await this.prisma.order.create({
         data: {
           name: req.body.name,
-          price: parseFloat(req.body.price),
-          description: req.body.description,
-          location: req.body.location,
-          status: req.body.status,
-          companyName: req.body.companyName,
-          startDate: new Date(req.body.startDate),
-          endDate: new Date(req.body.endDate),
+          price: req.body?.price ? parseFloat(req.body?.price) : 0,
+          description: req.body?.description ? req.body?.description : "",
+          location: req.body?.location ? req.body?.location : "",
+          status: req.body?.status?.toUpperCase(),
+          companyName: req.body?.companyName ? req.body?.companyName : "",
+          startDate: req.body?.startDate ? new Date(req.body?.startDate) : null,
+          endDate: req.body?.endDate ? new Date(req.body?.endDate) : null,
           userId,
         },
       });
@@ -85,11 +86,13 @@ export class OrderService {
           price: parseFloat(normalizedBody.price),
         }),
         ...(normalizedBody.location && { location: normalizedBody.location }),
-        ...(normalizedBody.companyName && { companyName: normalizedBody.companyName }),
+        ...(normalizedBody.companyName && {
+          companyName: normalizedBody.companyName,
+        }),
         ...(normalizedBody.description && {
           description: normalizedBody.description,
         }),
-        ...(normalizedBody.status && { status: normalizedBody.status }),
+        ...(normalizedBody.status && { status: normalizedBody.status?.toUpperCase() }),
         ...(normalizedBody.startDate && {
           startDate: new Date(normalizedBody.startDate),
         }),
@@ -175,11 +178,11 @@ export class OrderService {
   async uploadFilesToOrder(orderId: string, files: Array<Express.Multer.File>) {
     try {
       // Validate if the project exists
-      const project = await this.prisma.order.findUnique({
+      const order = await this.prisma.order.findUnique({
         where: { id: orderId },
       });
 
-      if (!project) {
+      if (!order) {
         throw new NotFoundException("Order not found!");
       }
 
@@ -243,12 +246,16 @@ export class OrderService {
   async getOrders(page: number = 1, limit: number = 10) {
     try {
       const offset = (page - 1) * limit;
-      const orders = await this.prisma.project.findMany({
+      const orders = await this.prisma.order.findMany({
         skip: offset,
         take: limit,
         orderBy: { createdAt: "desc" },
         include: {
-          files: true,
+          files: {
+            include: {
+              OrderSignatures: true,
+            },
+          },
         },
       });
 
@@ -313,12 +320,12 @@ export class OrderService {
         where: { id: orderId },
         include: {
           files: {
-            select: {
-              id: true,
-              filePath: true,
-              createdAt: true,
-              updatedAt: true,
+            include: {
+              OrderSignatures: true,
             },
+            orderBy: {
+              createdAt: 'desc'
+            }
           },
         },
       });
@@ -402,21 +409,21 @@ export class OrderService {
       // Fetch total completed issues count
       const totalCompletedOrders = await this.prisma.order.count({
         where: {
-          status: "Completed",
+          status: "COMPLETED",
         },
       });
 
       // Fetch total to-do issues count
       const totalPendingOrders = await this.prisma.order.count({
         where: {
-          status: "Pending",
+          status: "PENDING",
         },
       });
 
       // Fetch total to-do issues count
       const totalInProgressOrders = await this.prisma.order.count({
         where: {
-          status: "In Progress",
+          status: "IN PROGRESS",
         },
       });
 
@@ -594,4 +601,6 @@ export class OrderService {
       throw error;
     }
   }
+
+
 }

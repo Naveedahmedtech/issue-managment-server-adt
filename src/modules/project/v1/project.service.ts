@@ -28,15 +28,27 @@ export class ProjectService {
     try {
       const { id: userId } = req.userDetails;
 
+      if (body.companyId) {
+        const company = await this.prisma.company.findUnique({
+          where: {
+            id: body.companyId,
+          },
+        });
+
+        if (!company) {
+          throw new NotFoundException("Company not found!");
+        }
+      }
+
       const newProject = await this.prisma.project.create({
         data: {
           title: body.title,
           description: body.description,
-          status: body.status,
-          companyName: body.companyName,
+          status: body.status?.toUpperCase(),
           startDate: !body.startDate ? null : new Date(body.startDate),
           endDate: !body.endDate ? null : new Date(body.endDate),
           userId,
+          companyId: body.companyId || null,
         },
       });
 
@@ -86,14 +98,14 @@ export class ProjectService {
         ...(data.description && {
           description: data.description,
         }),
-        ...(data.status && { status: data.status }),
+        ...(data.status && { status: data.status?.toUpperCase() }),
         ...(data.startDate && {
           startDate: !data.startDate ? null : new Date(data.startDate),
         }),
         ...(data.endDate && {
           endDate: !data.endDate ? null : new Date(data.endDate),
         }),
-        ...(data.companyName && { companyName: data.companyName }),
+        ...(data.companyId && { companyId: data.companyId }),
         userId,
       };
 
@@ -344,6 +356,22 @@ export class ProjectService {
               displayName: true,
             },
           },
+          company: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          assignedUsers: {
+            select: {
+              user: {
+                select: {
+                  id: true,
+                  displayName: true,
+                }
+              }
+            }
+          }
         },
       });
 
@@ -382,13 +410,30 @@ export class ProjectService {
               displayName: true,
             },
           },
+          project: {
+            select: {
+              id: true,
+              archived: true,
+              title: true
+            },
+          },
+          assignedUsers: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  displayName: true,
+                },
+              },
+            },
+          },
         },
       });
 
       // Initialize the columns with the required order
       const columns = [
-        { id: "column-1", name: "To Do", tasks: [] },
-        { id: "column-2", name: "In Progress", tasks: [] },
+        { id: "column-1", name: "Active", tasks: [] },
+        { id: "column-2", name: "On Going", tasks: [] },
         { id: "column-3", name: "Completed", tasks: [] },
       ];
 
@@ -404,26 +449,33 @@ export class ProjectService {
             email: issue.user.email,
             displayName: issue.user.displayName,
           },
+          project: {
+            id: issue.project.id,
+            archived: issue.project.archived,
+            title: issue.project.title
+          },
           endDate: issue.endDate,
           files: issue.issueFiles.map((file) => ({
             name: file.filePath.split("/").pop(),
             type: file.filePath.split(".").pop().toUpperCase(),
             url: file.filePath,
           })),
+          assignedUsers: issue.assignedUsers,
+          createdAt: issue.createdAt,
         };
 
         // Normalize the status to lowercase for comparison
         const status = issue.status.toLowerCase();
 
         // Push the task into the correct column based on its status
-        switch (status) {
-          case "to do":
+        switch (status?.toUpperCase()) {
+          case "ACTIVE":
             columns[0].tasks.push(task);
             break;
-          case "in progress":
+          case "ON GOING":
             columns[1].tasks.push(task);
             break;
-          case "completed":
+          case "COMPLETED":
             columns[2].tasks.push(task);
             break;
           default:
@@ -442,6 +494,120 @@ export class ProjectService {
         `Failed to fetch issues for project with id ${projectId}`,
         error,
       );
+      throw error;
+    }
+  }
+
+  async getAllProjectIssues(userId?: string) {
+    try {
+      // Build the query filter dynamically
+      const filter = userId
+        ? {
+            assignedUsers: {
+              some: {
+                userId: userId, // Filters issues where the user is assigned
+              },
+            },
+          }
+        : {};
+
+      // Fetch issues filtered by userId if provided
+      const issues = await this.prisma.issue.findMany({
+        where: filter,
+        orderBy: {
+          createdAt: "desc",
+        },
+        include: {
+          issueFiles: {
+            select: {
+              id: true,
+              filePath: true,
+            },
+          },
+          user: {
+            select: {
+              email: true,
+              displayName: true,
+            },
+          },
+          project: {
+            select: {
+              id: true,
+              archived: true,
+              title: true,
+            },
+          },
+          assignedUsers: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  displayName: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // Initialize columns
+      const columns = [
+        { id: "column-1", name: "Active", tasks: [] },
+        { id: "column-2", name: "On Going", tasks: [] },
+        { id: "column-3", name: "Completed", tasks: [] },
+      ];
+
+      // Iterate through issues and categorize them by status
+      for (const issue of issues) {
+        const task = {
+          id: issue.id,
+          title: issue.title,
+          description: issue.description,
+          status: issue.status,
+          startDate: issue.startDate,
+          user: {
+            email: issue.user.email,
+            displayName: issue.user.displayName,
+          },
+          project: {
+            name: issue.project.title,
+            id: issue.project.id,
+            archived: issue.project.archived,
+          },
+          endDate: issue.endDate,
+          files: issue.issueFiles.map((file) => ({
+            name: file.filePath.split("/").pop(),
+            type: file.filePath.split(".").pop().toUpperCase(),
+            url: file.filePath,
+          })),
+          assignedUsers: issue.assignedUsers,
+        };
+
+        // Normalize status and assign tasks to columns
+        const status = issue.status?.toUpperCase();
+
+        switch (status) {
+          case "ACTIVE":
+            columns[0].tasks.push(task);
+            break;
+          case "ON GOING":
+            columns[1].tasks.push(task);
+            break;
+          case "COMPLETED":
+            columns[2].tasks.push(task);
+            break;
+          default:
+            columns[0].tasks.push(task); // Default to "Active" if status is unknown
+            break;
+        }
+      }
+
+      return {
+        message: "Issues retrieved successfully!",
+        data: { issues, columns },
+      };
+    } catch (error) {
+      this.logger.error(`Failed to fetch issues`, error);
       throw error;
     }
   }
@@ -533,20 +699,20 @@ export class ProjectService {
 
   async deleteProject(
     projectId: string,
-    req: Request & { userDetails?: User },
+    // req: Request & { userDetails?: User },
   ) {
     try {
       // Verify if the user owns the project
       const project = await this.prisma.project.findFirst({
         where: {
           id: projectId,
-          userId: req.userDetails?.id,
+          // userId: req.userDetails?.id,
         },
       });
 
       if (!project) {
-        this.logger.warn(`Project not found or access denied: ${projectId}`);
-        throw new Error("Project not found or access denied");
+        this.logger.warn(`Project not found: ${projectId}`);
+        throw new Error("Project not found");
       }
 
       // Find all associated files
@@ -609,7 +775,7 @@ export class ProjectService {
       // Fetch total to-do issues count
       const totalToDoIssues = await this.prisma.issue.count({
         where: {
-          status: "TO DO",
+          status: "ON GOING",
         },
       });
 
@@ -1229,4 +1395,102 @@ export class ProjectService {
       throw error;
     }
   }
+
+  async assignProject(body: { projectId: string; userIds: string[] }) {
+    const { projectId, userIds } = body;
+    try {
+      // Verify project exists
+      const project = await this.prisma.project.findUnique({
+        where: { id: projectId },
+      });
+      
+      if (!project) {
+        throw new NotFoundException('Project not found');
+      }
+      
+      // Verify all users exist
+      const users = await this.prisma.user.findMany({
+        where: {
+          id: { in: userIds }
+        },
+        select: {
+          id: true,
+          displayName: true,
+          email: true
+        }
+      });
+      
+      if (users.length !== userIds.length) {
+        throw new BadRequestException('One or more users not found');
+      }
+      
+      // Remove any existing assignments for this project
+      await this.prisma.projectAssignment.deleteMany({
+        where: { projectId }
+      });
+      
+      // Create new assignments
+      const assignments = await this.prisma.projectAssignment.createMany({
+        data: userIds.map(userId => ({
+          projectId,
+          userId
+        })),
+        skipDuplicates: true
+      });
+      
+      this.logger.log(`Project ${projectId} assigned to ${assignments.count} users`);
+      
+      
+      return {
+        message: 'Project assigned successfully'
+      };
+    } catch (error) {
+      this.logger.error("Failed to assign project", error);
+      throw error;
+    }
+  }
+
+
+  async removeAssignedUser(body: { projectId: string; userId: string }) {
+    const { projectId, userId } = body;
+    try {
+      // Verify project exists
+      const project = await this.prisma.project.findUnique({
+        where: { id: projectId },
+      });
+  
+      if (!project) {
+        throw new NotFoundException("Project not found");
+      }
+  
+      // Verify user exists in the project assignment
+      const assignment = await this.prisma.projectAssignment.findFirst({
+        where: {
+          projectId,
+          userId,
+        },
+      });
+  
+      if (!assignment) {
+        throw new BadRequestException("User is not assigned to this project");
+      }
+  
+      // Remove the user assignment
+      await this.prisma.projectAssignment.delete({
+        where: {
+          projectId_userId: { projectId, userId }, // Assuming composite unique constraint on projectId and userId
+        },
+      });
+  
+      this.logger.log(`User ${userId} removed from project ${projectId}`);
+  
+      return {
+        message: "User successfully unassigned from the project",
+      };
+    } catch (error) {
+      this.logger.error("Failed to remove user assignment", error);
+      throw error;
+    }
+  }
+  
 }

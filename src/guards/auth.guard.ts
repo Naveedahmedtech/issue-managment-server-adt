@@ -4,8 +4,6 @@ import {JwtService} from "@nestjs/jwt";
 import {PrismaService} from "../utils/prisma.service";
 import { Request } from 'express';
 
-
-
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(

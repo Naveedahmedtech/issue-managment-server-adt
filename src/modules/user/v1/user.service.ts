@@ -12,6 +12,7 @@ import { randomBytes } from "crypto";
 import axios from "axios";
 import * as bcrypt from "bcrypt";
 import { User } from "@prisma/client";
+import { ROLES } from "src/constants/roles-permissions.constants";
 
 @Injectable()
 export class UserService {
@@ -131,6 +132,47 @@ export class UserService {
   }
 
   /**
+   * Invite an external user to Azure AD.
+   */
+  private async inviteExternalUser(data: any): Promise<any> {
+    const token = await this.getAccessToken();
+
+    try {
+      this.logger.log(`Inviting external user: ${data.emailAddress}`);
+
+      const response = await axios.post(
+        "https://graph.microsoft.com/v1.0/invitations",
+        {
+          invitedUserEmailAddress: data.emailAddress,
+          inviteRedirectUrl:
+            "https://myapplications.microsoft.com/?tenantid=177709d9-e0ab-4f40-a7d6-a9e917bff688",
+          sendInvitationMessage: true, // Set to true to send an email invitation
+          invitedUserDisplayName: data.displayName || data.emailAddress,
+          invitedUserType: "Guest", // Ensure it's a guest user
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      this.logger.log(
+        `External user invited successfully: ${data.emailAddress}`,
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error inviting external user:", error);
+      this.logger.error(
+        "Failed to invite external Azure AD user",
+        error.response?.data || error,
+      );
+      throw new Error("Error inviting external user in Azure AD");
+    }
+  }
+
+  /**
    * Delete user from Azure AD.
    */
   private async deleteAzureUser(azureId: string): Promise<void> {
@@ -201,13 +243,20 @@ export class UserService {
     const hashedPassword = await bcrypt.hash(data.password, 10);
     try {
       // First, create the user in Azure AD
-      const azureUser = await this.createAzureUser({
+      const azureUser = await this.inviteExternalUser({
         displayName: data.displayName,
-        mailNickname: data.email.split("@")[0],
+        emailAddress: data.email,
         userPrincipalName: data.email,
         password: data.password,
         accountEnabled: data.accountEnabled,
       });
+      // const azureUser = await this.createAzureUser({
+      //   displayName: data.displayName,
+      //   mailNickname: data.email.split("@")[0],
+      //   userPrincipalName: data.email,
+      //   password: data.password,
+      //   accountEnabled: data.accountEnabled,
+      // });
 
       // Destructure roleId and permissions from the input
       const { roleId, permissions, ...userData } = data;
@@ -279,12 +328,12 @@ export class UserService {
 
       // Update basic user details if provided
       if (data.name) updateData.name = data.name;
-      if (data.email) updateData.email = data.email;
+      // if (data.email) updateData.email = data.email;
       if (data.displayName) updateData.displayName = data.displayName;
-      if (data.email && data.email !== existingUser.email) {
-        updateData.email = data.email;
-        await this.updateAzureUser(existingUser.azureId, { email: data.email });
-      }
+      // if (data.email && data.email !== existingUser.email) {
+      //   updateData.email = data.email;
+      //   await this.updateAzureUser(existingUser.azureId, { email: data.email });
+      // }
 
       // Handle role updates
       if (data.roleId && data.roleId !== existingUser.roleId) {
@@ -382,7 +431,7 @@ export class UserService {
       }
 
       // Delete the user from Azure AD
-      await this.deleteAzureUser(user.azureId);
+      // await this.deleteAzureUser(user.azureId);
 
       // Soft delete the user by updating the `deleted_at` and `is_deleted` fields
       await this.prisma.user.delete({
@@ -394,32 +443,133 @@ export class UserService {
         message: "User deleted successfully.",
       };
     } catch (error) {
-      this.logger.error(
-        `Failed to delete user with ID: ${userId}`,
-        error,
-      );
+      this.logger.error(`Failed to delete user with ID: ${userId}`, error);
       throw error;
     }
   }
 
-  async getAllUsers(
-    page: number = 1,
-    limit: number = 20,
-    // req: Request & { userDetails?: User },
-  ) {
+  // async getAllUsers(page: number = 1, limit: number = 20, roleName?: string) {
+  //   try {
+  //     const skip = (page - 1) * limit;
+
+  //     // Build the where clause conditionally based on roleName
+  //     const whereClause = roleName
+  //       ? {
+  //           role: {
+  //             name: roleName,
+  //           },
+  //         }
+  //       : {};
+
+  //     // Fetch users, optionally filtering by role name
+  //     const users = await this.prisma.user.findMany({
+  //       skip,
+  //       take: limit,
+  //       where: whereClause,
+  //       select: {
+  //         id: true,
+  //         email: true,
+  //         name: true,
+  //         displayName: true,
+  //         createdAt: true,
+  //         updatedAt: true,
+  //         role: {
+  //           select: {
+  //             id: true,
+  //             name: true,
+  //             permissions: {
+  //               select: {
+  //                 permission: {
+  //                   select: {
+  //                     action: true,
+  //                     description: true,
+  //                   },
+  //                 },
+  //               },
+  //             },
+  //           },
+  //         },
+  //         userPermissions: {
+  //           select: {
+  //             permission: {
+  //               select: {
+  //                 action: true,
+  //                 description: true,
+  //               },
+  //             },
+  //           },
+  //         },
+  //       },
+  //     });
+
+  //     // Count total users, applying the same role name filter if provided
+  //     const totalUsers = await this.prisma.user.count({
+  //       where: whereClause,
+  //     });
+
+  //     // Format the users' data
+  //     const formattedUsers = users.map((user) => {
+  //       const rolePermissions =
+  //         user.role?.permissions.map((p) => p.permission.action) || [];
+  //       const userPermissions =
+  //         user.userPermissions.map((p) => p.permission.action) || [];
+
+  //       return {
+  //         id: user.id,
+  //         email: user.email,
+  //         name: user.name,
+  //         displayName: user.displayName,
+  //         role: user.role?.name,
+  //         permissions: Array.from(
+  //           new Set([...rolePermissions, ...userPermissions]),
+  //         ),
+  //         createdAt: user.createdAt,
+  //         updatedAt: user.updatedAt,
+  //       };
+  //     });
+
+  //     this.logger.log("Fetched users successfully");
+  //     return {
+  //       message: "Users fetched successfully",
+  //       data: {
+  //         pagination: {
+  //           total: totalUsers,
+  //           page,
+  //           limit,
+  //         },
+  //         users: formattedUsers,
+  //       },
+  //     };
+  //   } catch (error) {
+  //     this.logger.error("Failed to fetch users", error);
+  //     throw error;
+  //   }
+  // }
+
+  async getAllUsers(page: number = 1, limit: number = 20, roleName?: string) {
     try {
       const skip = (page - 1) * limit;
-      // const currentUserId = req.userDetails?.id;
 
-      // Fetch users, excluding the current logged-in user
+      // Build the where clause conditionally based on roleName and excluding specific emails
+      const whereClause: any = {
+        // NOT: [
+        //   { email: "jonas@viewsoft.com" },
+        //   { email: "malik.wahhab@aridiantechnologies.co" },
+        //   { email: "super_admin@viewsoftweb.onmicrosoft.com" },
+        // ],
+      };
+
+      if (roleName) {
+        whereClause.role = {
+          name: roleName,
+        };
+      }
+
+      // Fetch users, optionally filtering by role name
       const users = await this.prisma.user.findMany({
         skip,
         take: limit,
-        // where: {
-        //   id: {
-        //     not: currentUserId,
-        //   },
-        // },
+        where: whereClause,
         select: {
           id: true,
           email: true,
@@ -456,13 +606,9 @@ export class UserService {
         },
       });
 
-      // Count total users excluding the current user
+      // Count total users, applying the same role name filter and exclusion rule
       const totalUsers = await this.prisma.user.count({
-        // where: {
-        //   id: {
-        //     not: currentUserId,
-        //   },
-        // },
+        where: whereClause,
       });
 
       // Format the users' data
@@ -554,32 +700,56 @@ export class UserService {
 
       // Check if the user exists in the database
       let user = await this.prisma.user.findUnique({
-        where: { azureId: userData.azureId },
+        where: { email: userData.email },
       });
 
-      // If user does not exist, create a new user with the default role "WORKER"
+      let role;
       if (!user) {
-        const workerRole = await this.prisma.role.findUnique({
-          where: { name: "WORKER" },
-        });
-
-        if (!workerRole) {
-          throw new Error('Default role "WORKER" not found');
+        // Assign role based on predefined admin emails
+        if (
+          userData.email === "johannes@assemble-it.no" ||
+          userData.email === "malik.wahhab@aridiantechnologies.co" ||
+          userData.email === "super_admin@viewsoftweb.onmicrosoft.com"
+        ) {
+          role = await this.prisma.role.findUnique({
+            where: { name: ROLES.SUPER_ADMIN },
+          });
+        } else {
+          role = await this.prisma.role.findUnique({
+            where: { name: ROLES.WORKER },
+          });
         }
 
+        // Create the new user with the assigned role
         user = await this.prisma.user.create({
           data: {
             azureId: userData.azureId,
             email: userData.email,
             displayName: userData.name,
             role: {
-              connect: { id: workerRole.id },
+              connect: { id: role.id },
             },
           },
         });
 
+        // Assign all permissions to SUPER_ADMIN users
+        if (role.name === ROLES.SUPER_ADMIN) {
+          try {
+            const permissions = await this.prisma.permission.findMany();
+            console.log("Permissions: --> ", permissions);
+            await this.prisma.userPermission.createMany({
+              data: permissions.map((permission) => ({
+                userId: user.id,
+                permissionId: permission.id,
+              })),
+            });
+          } catch (error) {
+            console.log("Permission not found", error);
+          }
+        }
+
         this.logger.log(
-          `New user created with default role "WORKER": ${user.email}`,
+          `New user created with role "${role.name}": ${user.email}`,
         );
       } else {
         this.logger.log(`Existing user authenticated: ${user.email}`);
@@ -590,7 +760,7 @@ export class UserService {
         {
           sub: user.azureId,
           email: user.email,
-          name: user.name,
+          name: user.displayName,
         },
         {
           secret: process.env.JWT_SECRET || "jwt-secret",
@@ -602,7 +772,6 @@ export class UserService {
       res.cookie("auth_token", customToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: false,
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       });
 
@@ -645,7 +814,6 @@ export class UserService {
       res.clearCookie("auth_token", {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: false,
       });
 
       this.logger.log("User logged out successfully");

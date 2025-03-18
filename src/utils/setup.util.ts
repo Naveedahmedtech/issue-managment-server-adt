@@ -1,12 +1,12 @@
-import { INestApplication, VersioningType } from '@nestjs/common';
-import { PrismaExceptionFilter } from '../filters/prisma-exception.filter';
-import { ResponseInterceptor } from '../interceptor/response.interceptor';
-import * as cookieParser from 'cookie-parser';
+import { INestApplication, VersioningType } from "@nestjs/common";
+import { PrismaExceptionFilter } from "../filters/prisma-exception.filter";
+import { ResponseInterceptor } from "../interceptor/response.interceptor";
+import * as cookieParser from "cookie-parser";
 
 export async function setupApp(app: INestApplication) {
   // Enable CORS
   app.enableCors({
-    origin: [process.env.FRONTEND_URL, process.env.ANGULAR_URL],
+    origin: ['http://localhost:5173', 'http://localhost:4200', 'http://localhost:51142'],
     credentials: true,
   });
 
@@ -18,7 +18,7 @@ export async function setupApp(app: INestApplication) {
   app.useGlobalInterceptors(new ResponseInterceptor());
 
   // Set global prefix and versioning
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix("api");
   app.enableVersioning({
     type: VersioningType.URI,
   });

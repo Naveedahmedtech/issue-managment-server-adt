@@ -67,8 +67,7 @@ export class OrderController {
 
   @Get()
   @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
-  async getAllProjects() // @Query("page") page: string,
-  // @Query("limit") limit: string,
+  async getAllProjects() // @Query("limit") limit: string, // @Query("page") page: string,
   {
     // const pageNumber = parseInt(page, 10) || 1;
     // const limitNumber = parseInt(limit, 10) || 10;
@@ -143,4 +142,6 @@ export class OrderController {
       sortOrder,
     );
   }
+
+
 }

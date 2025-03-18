@@ -19,7 +19,7 @@ import { AuthGuard } from "src/guards/auth.guard";
 import { FileUploadInterceptor } from "src/interceptor/file-upload.interceptor";
 import { RolesAndPermissions } from "src/utils/roleAndPermission.decorator";
 import { PERMISSIONS, ROLES } from "src/constants/roles-permissions.constants";
-import { User } from "@prisma/client";
+// import { User } from "@prisma/client";
 import { ValidationUtils } from "src/utils/validation.utils";
 import { normalizeKeys } from "src/utils/common";
 
@@ -123,7 +123,6 @@ export class ProjectController {
   @FileUploadInterceptor("./uploads/projects", 10) // Upload up to 10 files to the 'projects' directory
   @RolesAndPermissions(
     [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
-    [PERMISSIONS.FILES.UPLOAD_PROJECT],
   )
   async uploadFilesToProject(
     @Req() req: Request,
@@ -161,6 +160,15 @@ export class ProjectController {
     const limitNumber = parseInt(limit, 10) || 10;
 
     return this.projectService.getProjectList(pageNumber, limitNumber);
+  }
+
+  @Get("all-issues")
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
+  async getAllProjectIssues(
+    @Query("userId") userId: string,
+  ) {
+
+    return this.projectService.getAllProjectIssues(userId);
   }
 
   @Get("archived")
@@ -210,9 +218,9 @@ export class ProjectController {
   )
   async deleteProject(
     @Param("projectId") projectId: string,
-    @Req() req: Request & { userDetails?: User },
+    // @Req() req: Request & { userDetails?: User },
   ) {
-    return await this.projectService.deleteProject(projectId, req);
+    return await this.projectService.deleteProject(projectId);
   }
 
   @Get("dashboard/stats")
@@ -313,5 +321,15 @@ export class ProjectController {
       limitNumber,
       issueId,
     );
+  }
+
+  @Post('assign-to-users')
+  async assignProject(@Body() body: {projectId: string; userIds: string[]}) {
+    return this.projectService.assignProject(body);
+  }
+
+  @Post('unassign-to-users')
+  async removeAssignedUser(@Body() body: {projectId: string; userId: string}) {
+    return this.projectService.removeAssignedUser(body);
   }
 }
