@@ -550,18 +550,24 @@ export class UserService {
     try {
       const skip = (page - 1) * limit;
 
-      // Build the where clause conditionally based on roleName and excluding specific emails
+      // Build the where clause conditionally based on roleName and excluding specific emails and role SUPER_ADMIN
       const whereClause: any = {
         // NOT: [
         //   { email: "jonas@viewsoft.com" },
         //   { email: "malik.wahhab@aridiantechnologies.co" },
         //   { email: "super_admin@viewsoftweb.onmicrosoft.com" },
         // ],
+        role: {
+          NOT: {
+            name: ROLES.SUPER_ADMIN // Exclude users with the role SUPER_ADMIN
+          }
+        }
       };
 
       if (roleName) {
         whereClause.role = {
-          name: roleName,
+          ...whereClause.role, // Preserve existing NOT condition
+          name: roleName, // Filter by role if provided
         };
       }
 

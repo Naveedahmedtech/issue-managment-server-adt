@@ -6,7 +6,7 @@ import * as cookieParser from "cookie-parser";
 export async function setupApp(app: INestApplication) {
   // Enable CORS
   app.enableCors({
-    origin: ['http://localhost:5173', 'http://localhost:4200', 'http://localhost:51142'],
+    origin: ['http://localhost:5173', 'http://localhost:4200', 'http://localhost:51142', 'http://192.168.18.64:4200', 'http://192.168.18.59:4200'],
     credentials: true,
   });
 
