@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post, Put, Query, UploadedFiles } from "@nestjs/common";
+import {Body, Controller, Param, Patch, Post, Put, Query, UploadedFiles} from "@nestjs/common";
 import { UniversalService } from "./universal.service";
 import { FileUploadInterceptor } from "src/interceptor/file-upload.interceptor";
 
@@ -23,5 +23,13 @@ export class UniversalController {
   async saveSignature(@Body() body: any) {
     const { image, orderId, fileId, initials } = body;
     return await this.universalService.saveSignature(image, orderId, fileId, initials);
+  }
+
+  @Patch("order/:fileId/file")
+  async updateSignedStatus(
+      @Param("fileId") fileId: string,
+  ) {
+    const params = { fileId: fileId, };
+    return await this.universalService.updateSignedStatus(params);
   }
 }

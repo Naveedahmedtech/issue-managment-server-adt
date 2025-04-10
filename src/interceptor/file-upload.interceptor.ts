@@ -24,8 +24,8 @@ export function FileUploadInterceptor(destinationPath: string, maxFiles = 10) {
             const existingFilePath = `${destinationPath}/${finalFileName}`;
             if (fs.existsSync(existingFilePath)) {
               try {
-                fs.unlinkSync(existingFilePath);
-                logger.log(`Deleted existing file: ${existingFilePath}`);
+                // fs.unlinkSync(existingFilePath);
+                // logger.log(`Deleted existing file: ${existingFilePath}`);
               } catch (error) {
                 logger.error(
                   `Failed to delete existing file: ${existingFilePath}`,
