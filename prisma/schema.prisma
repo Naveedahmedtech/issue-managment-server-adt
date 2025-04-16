@@ -178,6 +178,8 @@ model Order {
   archived        Boolean           @default(false)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
+  companyId       String?             @db.Uuid
+  company         Company?            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   userId          String            @db.Uuid
   user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   files           OrderFile[]
@@ -213,6 +215,7 @@ model Company {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   Project   Project[]
+  Order     Order[]
 }
 
 model ProjectAssignment {
