@@ -13,6 +13,7 @@ import { OrderModule } from "./modules/order/v1/order.module";
 import { ConfigModule } from '@nestjs/config';
 import { UniversalModule } from "./modules/universal/v1/universal.module";
 import { CompanyModule } from "./modules/company/v1/company.module";
+import {CommentsModule} from "./modules/comments/comments.module";
 
 @Module({
   imports: [
@@ -32,7 +33,8 @@ import { CompanyModule } from "./modules/company/v1/company.module";
     IssueModule,
     OrderModule,
     UniversalModule,
-    CompanyModule
+    CompanyModule,
+    CommentsModule
   ],
   controllers: [AppController],
   providers: [AppService],

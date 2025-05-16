@@ -40,7 +40,6 @@ export class ProjectService {
                     throw new NotFoundException("Company not found!");
                 }
             }
-
             const newProject = await this.prisma.project.create({
                 data: {
                     title: body.title,
@@ -50,6 +49,7 @@ export class ProjectService {
                     endDate: !body.endDate ? null : new Date(body.endDate),
                     userId,
                     companyId: body.companyId || null,
+                    isOrder: body.isOrder === "true" || false,
                 },
             });
 
@@ -123,6 +123,7 @@ export class ProjectService {
                     endDate: !data.endDate ? null : new Date(data.endDate),
                 }),
                 ...(data.companyId && {companyId: data.companyId}),
+                ...(data.isOrder && {isOrder: data.isOrder === "true"}),
                 userId,
             };
 

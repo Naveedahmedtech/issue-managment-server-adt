@@ -30,6 +30,7 @@ model User {
   IssueHistory      IssueHistory[]
   assignedUsers     IssueAssignment[]
   assignedProjects  ProjectAssignment[]
+  comments          Comment[]
 }
 
 model Role {
@@ -91,11 +92,13 @@ model Project {
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
   userId        String              @db.Uuid
+  isOrder       Boolean             @default(false)
   user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   files         File[]
   issues        Issue[]
   issueFiles    IssueFile[]
   assignedUsers ProjectAssignment[]
+  Comment       Comment[]
 }
 
 model File {
@@ -178,8 +181,8 @@ model Order {
   archived        Boolean           @default(false)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
-  companyId       String?             @db.Uuid
-  company         Company?            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  companyId       String?           @db.Uuid
+  company         Company?          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   userId          String            @db.Uuid
   user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   files           OrderFile[]
@@ -190,7 +193,7 @@ model OrderFile {
   id              String            @id @default(uuid()) @db.Uuid
   orderId         String            @db.Uuid
   filePath        String
-  isSigned          Boolean?          @default(false)
+  isSigned        Boolean?          @default(false)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   order           Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -228,4 +231,31 @@ model ProjectAssignment {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, userId]) // Prevents assigning the same user to the same project multiple times
+}
+
+/// A “statement” left by a user (e.g. “Remember to…”, “Park at backdoor…”)
+model Comment {
+  id        String   @id @default(uuid()) @db.Uuid
+  message   String   @db.Text
+  userId    String   @db.Uuid
+  projectId String   @db.Uuid
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// zero or more files attached to this comment
+  files CommentFile[]
+}
+
+/// Optional:  let users upload one or more files per comment
+model CommentFile {
+  id        String   @id @default(uuid()) @db.Uuid
+  commentId String   @db.Uuid
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  filePath  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([commentId, filePath])
 }
