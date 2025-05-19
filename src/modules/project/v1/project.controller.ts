@@ -127,9 +127,10 @@ export class ProjectController {
   async uploadFilesToProject(
     @Req() req: Request,
     @Param("projectId") projectId: string,
+    @Body() data: {isOrder: string},
     @UploadedFiles() files: Array<Express.Multer.File>,
   ) {
-    return await this.projectService.uploadFilesToProject(projectId, files);
+    return await this.projectService.uploadFilesToProject(projectId, files, data.isOrder);
   }
 
   @Patch(":projectId/toggle-archive")

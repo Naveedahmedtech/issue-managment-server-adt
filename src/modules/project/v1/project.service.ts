@@ -75,6 +75,7 @@ export class ProjectService {
                         data: {
                             projectId: newProject.id,
                             filePath: pathPosix.join("uploads", "projects", file.filename),
+                            isOrder: body.isOrder === "true",
                         },
                     });
                 }
@@ -185,6 +186,7 @@ export class ProjectService {
                         data: {
                             projectId: updatedProject.id,
                             filePath: pathPosix.join("uploads", "projects", file.filename),
+                            isOrder: data.isOrder === "true"
                         },
                     });
                 }
@@ -234,6 +236,7 @@ export class ProjectService {
     async uploadFilesToProject(
         projectId: string,
         files: Array<Express.Multer.File>,
+        isOrder: string
     ) {
         try {
             // Validate if the project exists
@@ -278,6 +281,7 @@ export class ProjectService {
                         data: {
                             projectId,
                             filePath: pathPosix.join("uploads", "projects", file.filename),
+                            isOrder: isOrder === "true"
                         },
                     });
                 }
