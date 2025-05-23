@@ -45,13 +45,16 @@ export class CommentsService {
   /** Fetch the very latest comment for “highlight” */
   async getLatest(projectId) {
     try {
-      return this.prisma.comment.findFirst({
+
+      const comments = await this.prisma.comment.findFirst({
         where: { projectId },
         orderBy: { createdAt: "desc" },
         include: {
           user: { select: { id: true, displayName: true } },
         },
       });
+
+      return comments || {};
     } catch (error) {
       this.logger.error("Failed to get the latest comments", error);
       throw error;
