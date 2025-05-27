@@ -1,4 +1,3 @@
-// src/comments/comments.service.ts
 import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "src/utils/prisma.service";
 import { CommentsGateway } from "./comments.gateway";

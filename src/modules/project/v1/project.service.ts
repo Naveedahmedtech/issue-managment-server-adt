@@ -95,6 +95,39 @@ export class ProjectService {
         },
       });
 
+      // ——— NEW: assign the default checklist template ———
+      const defaultTemplate = await this.prisma.checklistTemplate.findFirst({
+        where: { isDefault: true },
+        include: { items: true },
+      });
+      if (defaultTemplate) {
+        // copy & re-sequence its items exactly like upsertProjectChecklist does
+        const raw = defaultTemplate.items.map((i, idx) => ({ ...i, idx }));
+        const withOrder = raw
+          .filter((i) => i.order != null)
+          .sort((a, b) => a.order - b.order || a.idx - b.idx);
+        const withoutOrder = raw.filter((i) => i.order == null);
+        const ordered = [...withOrder, ...withoutOrder];
+
+        await this.prisma.projectChecklist.create({
+          data: {
+            projectId: newProject.id,
+            templateId: defaultTemplate.id,
+            items: {
+              create: ordered.map((i, idx) => ({
+                templateItemId: i.id,
+                order: idx + 1,
+                question: i.question,
+                userId, // track who seeded it
+              })),
+            },
+          },
+        });
+        this.logger.log(
+          `Assigned default checklist ${defaultTemplate.id} to project ${newProject.id}`,
+        );
+      }
+
       // 5) Seed assignments & availabilities in one shot
       if (candidates.length) {
         // a) assignments
@@ -131,6 +164,24 @@ export class ProjectService {
             },
           });
         }
+      }
+
+      if (body.isOrder === "true") {
+        const defaultOrderFilePath = pathPosix.join(
+          "uploads",
+          "orders",
+          "Service English.pdf",
+        );
+        await this.prisma.file.create({
+          data: {
+            projectId: newProject.id,
+            filePath: defaultOrderFilePath,
+            isOrder: true,
+          },
+        });
+        this.logger.log(
+          `Attached default order file to project ${newProject.id}`,
+        );
       }
 
       this.logger.log(`Project created successfully: ${newProject.id}`);
@@ -1562,53 +1613,99 @@ export class ProjectService {
 
   async assignProject(body: { projectId: string; userIds: string[] }) {
     const { projectId, userIds } = body;
+
     try {
-      // Verify project exists
+      // 1) Verify project exists and grab its timeline
       const project = await this.prisma.project.findUnique({
         where: { id: projectId },
+        select: { startDate: true, endDate: true },
       });
-
       if (!project) {
         throw new NotFoundException("Project not found");
       }
+      const { startDate: startDt, endDate: endDt } = project;
 
-      // Verify all users exist
-      const users = await this.prisma.user.findMany({
-        where: {
-          id: { in: userIds },
-        },
-        select: {
-          id: true,
-          displayName: true,
-          email: true,
-        },
-      });
+      // 2) Conflict check: make sure none of these users is already booked
+      if (startDt && endDt && userIds.length > 0) {
+        const conflicts = await this.prisma.availability.findMany({
+          where: {
+            userId: { in: userIds },
+            projectId: { not: projectId },
+            AND: [{ startDate: { lte: endDt } }, { endDate: { gte: startDt } }],
+          },
+          select: {
+            user: {
+              select: { displayName: true },
+            },
+          },
+        });
 
-      if (users.length !== userIds.length) {
-        throw new BadRequestException("One or more users not found");
+        if (conflicts.length) {
+          const names = Array.from(
+            new Set(conflicts.map((c) => c.user.displayName)),
+          );
+          throw new BadRequestException(
+            `Cannot assign users [${names.join(
+              ", ",
+            )}] — they’re already booked in that timeframe.`,
+          );
+        }
       }
 
-      // Remove any existing assignments for this project
+      // 3) Fetch previous assignments so we can reconcile Availability afterward
+      const prev = await this.prisma.projectAssignment.findMany({
+        where: { projectId },
+        select: { userId: true },
+      });
+      const prevUserIds = prev.map((a) => a.userId);
+
+      // 4) Delete old assignments
       await this.prisma.projectAssignment.deleteMany({
         where: { projectId },
       });
 
-      // Create new assignments
-      const assignments = await this.prisma.projectAssignment.createMany({
-        data: userIds.map((userId) => ({
+      // 5) Create new assignments
+      await this.prisma.projectAssignment.createMany({
+        data: userIds.map((uid) => ({
           projectId,
-          userId,
+          userId: uid,
         })),
         skipDuplicates: true,
       });
 
-      this.logger.log(
-        `Project ${projectId} assigned to ${assignments.count} users`,
-      );
+      // 6) Reconcile Availability rows:
 
-      return {
-        message: "Project assigned successfully",
-      };
+      // 6a) Remove availabilities for users no longer on the project
+      const removed = prevUserIds.filter((uid) => !userIds.includes(uid));
+      if (removed.length) {
+        await this.prisma.availability.deleteMany({
+          where: {
+            projectId,
+            userId: { in: removed },
+          },
+        });
+      }
+
+      // 6b) Seed availabilities for newly added users
+      const added = userIds.filter((uid) => !prevUserIds.includes(uid));
+      if (added.length && startDt && endDt) {
+        await this.prisma.availability.createMany({
+          data: added.map((uid) => ({
+            projectId,
+            userId: uid,
+            startDate: startDt,
+            endDate: endDt,
+            startWeek: getISOWeek(startDt),
+            endWeek: getISOWeek(endDt),
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      this.logger.log(
+        `Project ${projectId} assigned to ${userIds.length} users`,
+      );
+      return { message: "Project assigned successfully" };
     } catch (error) {
       this.logger.error("Failed to assign project", error);
       throw error;
@@ -1617,43 +1714,41 @@ export class ProjectService {
 
   async removeAssignedUser(body: { projectId: string; userId: string }) {
     const { projectId, userId } = body;
-    try {
-      // Verify project exists
-      const project = await this.prisma.project.findUnique({
-        where: { id: projectId },
-      });
 
-      if (!project) {
-        throw new NotFoundException("Project not found");
-      }
-
-      // Verify user exists in the project assignment
-      const assignment = await this.prisma.projectAssignment.findFirst({
-        where: {
-          projectId,
-          userId,
-        },
-      });
-
-      if (!assignment) {
-        throw new BadRequestException("User is not assigned to this project");
-      }
-
-      // Remove the user assignment
-      await this.prisma.projectAssignment.delete({
-        where: {
-          projectId_userId: { projectId, userId }, // Assuming composite unique constraint on projectId and userId
-        },
-      });
-
-      this.logger.log(`User ${userId} removed from project ${projectId}`);
-
-      return {
-        message: "User successfully unassigned from the project",
-      };
-    } catch (error) {
-      this.logger.error("Failed to remove user assignment", error);
-      throw error;
+    // 1) Verify project exists
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
+    if (!project) {
+      throw new NotFoundException("Project not found");
     }
+
+    // 2) Verify the assignment exists
+    const assignment = await this.prisma.projectAssignment.findFirst({
+      where: { projectId, userId },
+    });
+    if (!assignment) {
+      throw new BadRequestException("User is not assigned to this project");
+    }
+
+    // 3) Delete assignment + availability in one transaction
+    await this.prisma.$transaction([
+      this.prisma.projectAssignment.delete({
+        where: {
+          projectId_userId: { projectId, userId },
+        },
+      }),
+      this.prisma.availability.deleteMany({
+        where: { projectId, userId },
+      }),
+    ]);
+
+    this.logger.log(
+      `User ${userId} removed from project ${projectId} (and availability cleaned up)`,
+    );
+
+    return {
+      message: "User successfully unassigned from the project",
+    };
   }
 }

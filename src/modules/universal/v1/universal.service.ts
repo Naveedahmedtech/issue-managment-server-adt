@@ -158,7 +158,7 @@ export class UniversalService {
 
     async updateSignedStatus({ fileId }: { fileId: string }) {
         try {
-            const fileFound = await this.prisma.orderFile.findUnique({
+            const fileFound = await this.prisma.file.findUnique({
                 where: { id: fileId }
             });
 
@@ -166,7 +166,7 @@ export class UniversalService {
                 throw new NotFoundException('File not found!');
             }
 
-            const file = await this.prisma.orderFile.update({
+            const file = await this.prisma.file.update({
                 data: {
                     isSigned: true
                 },

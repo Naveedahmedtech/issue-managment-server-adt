@@ -8,30 +8,33 @@ datasource db {
 }
 
 model User {
-  id                String              @id @default(uuid()) @db.Uuid
-  email             String              @unique
-  password          String?
-  name              String?
-  azureId           String?             @unique
-  displayName       String? // Corresponds to 'displayName' in Graph API
-  mailNickname      String? // Corresponds to 'mailNickname' in Graph API
-  userPrincipalName String? // Corresponds to 'userPrincipalName' in Graph API
-  accountEnabled    Boolean? // Corresponds to 'accountEnabled' in Graph API
-  deleted_at        DateTime?
-  is_deleted        Boolean             @default(false)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  roleId            String?             @db.Uuid
-  role              Role?               @relation("UserRole", fields: [roleId], references: [id], onDelete: SetNull)
-  userPermissions   UserPermission[]
-  projects          Project[]
-  Issue             Issue[]
-  Order             Order[]
-  IssueHistory      IssueHistory[]
-  assignedUsers     IssueAssignment[]
-  assignedProjects  ProjectAssignment[]
-  comments          Comment[]
-  Availability      Availability[]
+  id                   String                 @id @default(uuid()) @db.Uuid
+  email                String                 @unique
+  password             String?
+  name                 String?
+  azureId              String?                @unique
+  displayName          String? // Corresponds to 'displayName' in Graph API
+  mailNickname         String? // Corresponds to 'mailNickname' in Graph API
+  userPrincipalName    String? // Corresponds to 'userPrincipalName' in Graph API
+  accountEnabled       Boolean? // Corresponds to 'accountEnabled' in Graph API
+  deleted_at           DateTime?
+  is_deleted           Boolean                @default(false)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  roleId               String?                @db.Uuid
+  role                 Role?                  @relation("UserRole", fields: [roleId], references: [id], onDelete: SetNull)
+  userPermissions      UserPermission[]
+  projects             Project[]
+  Issue                Issue[]
+  Order                Order[]
+  IssueHistory         IssueHistory[]
+  assignedUsers        IssueAssignment[]
+  assignedProjects     ProjectAssignment[]
+  comments             Comment[]
+  Availability         Availability[]
+  ChecklistTemplate    ChecklistTemplate[]
+  ProjectChecklist     ProjectChecklist[]
+  ProjectChecklistItem ProjectChecklistItem[]
 }
 
 model Role {
@@ -103,8 +106,8 @@ model Project {
   assignedUsers    ProjectAssignment[]
   Comment          Comment[]
   Availability     Availability[]
-  // ProjectChecklist ProjectChecklist[]
-  // ChecklistFile    ChecklistFile[]
+  ProjectChecklist ProjectChecklist[]
+  ChecklistFile    ChecklistFile[]
 }
 
 model Availability {
@@ -126,79 +129,94 @@ model File {
   projectId String      @db.Uuid
   filePath  String
   isOrder   Boolean     @default(false)
+  isSigned  Boolean     @default(false)
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
   project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   IssueFile IssueFile[]
 }
 
-// /// ────────────────────────────────────────────────────────────
-// model ChecklistFile {
-//   id                   String                 @id @default(uuid()) @db.Uuid
-//   projectId            String                 @db.Uuid
-//   filePath             String
-//   isOrder              Boolean                @default(false)
-//   createdAt            DateTime               @default(now())
-//   updatedAt            DateTime               @updatedAt
-//   project              Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
-//   ProjectChecklistItem ProjectChecklistItem[]
-// }
+/// ────────────────────────────────────────────────────────────
+model ChecklistFile {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  projectId            String                 @db.Uuid
+  filePath             String
+  isOrder              Boolean                @default(false)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  project              Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  ProjectChecklistItem ProjectChecklistItem[]
+}
 
-// /// 1) The master template & its questions
-// model ChecklistTemplate {
-//   id               String                  @id @default(uuid()) @db.Uuid
-//   name             String /// e.g. “Standard Project QA”
-//   description      String?
-//   items            ChecklistTemplateItem[] @relation("TemplateItems")
-//   createdAt        DateTime                @default(now())
-//   updatedAt        DateTime                @updatedAt
-//   ProjectChecklist ProjectChecklist[]
-// }
+/// 1) The master template & its questions
+model ChecklistTemplate {
+  id          String  @id @default(uuid()) @db.Uuid
+  name        String  @unique /// e.g. “Standard Project QA”
+  description String?
 
-// model ChecklistTemplateItem {
-//   id                   String                 @id @default(uuid()) @db.Uuid
-//   template             ChecklistTemplate      @relation("TemplateItems", fields: [templateId], references: [id], onDelete: Cascade)
-//   templateId           String                 @db.Uuid
-//   order                Int /// 1,2,3… for display
-//   question             String /// the prompt, e.g. “Have all specs been reviewed?”
-//   createdAt            DateTime               @default(now())
-//   updatedAt            DateTime               @updatedAt
-//   ProjectChecklistItem ProjectChecklistItem[]
-// }
+  /// ← new: who created this template
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-// /// ────────────────────────────────────────────────────────────
-// /// 2) When you start a project, you link to the default template
-// ///    and make a *copy* of all its items into a ProjectChecklist.
-// model ProjectChecklist {
-//   id         String                 @id @default(uuid()) @db.Uuid
-//   project    Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
-//   projectId  String                 @db.Uuid
-//   template   ChecklistTemplate      @relation(fields: [templateId], references: [id])
-//   templateId String                 @db.Uuid
-//   items      ProjectChecklistItem[] @relation("ProjectItems")
-//   createdAt  DateTime               @default(now())
-//   updatedAt  DateTime               @updatedAt
-// }
+  items     ChecklistTemplateItem[] @relation("TemplateItems")
+  isDefault Boolean                 @default(false)
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
 
-// model ProjectChecklistItem {
-//   id                 String           @id @default(uuid()) @db.Uuid
-//   projectChecklist   ProjectChecklist @relation("ProjectItems", fields: [projectChecklistId], references: [id], onDelete: Cascade)
-//   projectChecklistId String           @db.Uuid
+  ProjectChecklist ProjectChecklist[]
+}
 
-//   /// optional back-pointer so you know which template item you copied from
-//   templateItem   ChecklistTemplateItem? @relation(fields: [templateItemId], references: [id], onDelete: SetNull)
-//   templateItemId String?                @db.Uuid
+model ChecklistTemplateItem {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  template             ChecklistTemplate      @relation("TemplateItems", fields: [templateId], references: [id], onDelete: Cascade)
+  templateId           String                 @db.Uuid
+  order                Int /// 1,2,3… for display
+  question             String /// the prompt, e.g. “Have all specs been reviewed?”
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  ProjectChecklistItem ProjectChecklistItem[]
+}
 
-//   order            Int /// preserve template order, or re-order
-//   question         String /// copied from the templateItem.question
-//   answer           Boolean? /// Yes (true), No (false), null = unanswered
-//   comment          String? /// any extra notes
-//   attachmentFile   ChecklistFile? @relation(fields: [attachmentFileId], references: [id], onDelete: SetNull)
-//   attachmentFileId String?        @db.Uuid
+/// ────────────────────────────────────────────────────────────
+/// 2) When you start a project, you link to the default template
+///    and make a *copy* of all its items into a ProjectChecklist.
+model ProjectChecklist {
+  id         String                 @id @default(uuid()) @db.Uuid
+  project    Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId  String                 @db.Uuid
+  template   ChecklistTemplate      @relation(fields: [templateId], references: [id])
+  templateId String                 @db.Uuid
+  items      ProjectChecklistItem[] @relation("ProjectItems")
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+  User       User?                  @relation(fields: [userId], references: [id])
+  userId     String?                @db.Uuid
 
-//   createdAt DateTime @default(now())
-//   updatedAt DateTime @updatedAt
-// }
+  @@unique([projectId, templateId], name: "projectId_templateId")
+}
+
+model ProjectChecklistItem {
+  id                 String           @id @default(uuid()) @db.Uuid
+  projectChecklist   ProjectChecklist @relation("ProjectItems", fields: [projectChecklistId], references: [id], onDelete: Cascade)
+  projectChecklistId String           @db.Uuid
+
+  /// optional back-pointer so you know which template item you copied from
+  templateItem   ChecklistTemplateItem? @relation(fields: [templateItemId], references: [id], onDelete: SetNull)
+  templateItemId String?                @db.Uuid
+
+  order            Int /// preserve template order, or re-order
+  question         String /// copied from the templateItem.question
+  answer           Boolean? /// Yes (true), No (false), null = unanswered
+  comment          String? /// any extra notes
+  attachmentFile   ChecklistFile? @relation(fields: [attachmentFileId], references: [id], onDelete: SetNull)
+  attachmentFileId String?        @db.Uuid
+  /// ← new: who created this template
+  userId           String         @db.Uuid
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
 
 model Issue {
   id            String            @id @default(uuid()) @db.Uuid

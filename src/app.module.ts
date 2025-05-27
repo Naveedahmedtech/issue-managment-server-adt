@@ -14,6 +14,7 @@ import { ConfigModule } from '@nestjs/config';
 import { UniversalModule } from "./modules/universal/v1/universal.module";
 import { CompanyModule } from "./modules/company/v1/company.module";
 import {CommentsModule} from "./modules/comments/comments.module";
+import { ChecklistModule } from "./modules/checklists/v1/checklist.module";
 
 @Module({
   imports: [
@@ -29,12 +30,13 @@ import {CommentsModule} from "./modules/comments/comments.module";
     RoleModule,
     PermissionModule,
     UserModule,
-    ProjectModule,
+    ProjectModule, 
     IssueModule,
     OrderModule,
     UniversalModule,
     CompanyModule,
-    CommentsModule
+    CommentsModule,
+    ChecklistModule
   ],
   controllers: [AppController],
   providers: [AppService],
