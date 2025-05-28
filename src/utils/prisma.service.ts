@@ -26,7 +26,7 @@ import {
               userId: result.userId,
               fieldName: "Issue Created",
               oldValue: null,
-              newValue: `Title: ${result.title} \n Description: ${result.description} \n Start Date: ${result.startDate} \n end Date: ${result.endDate} \n Status: ${result.status}`,
+              newValue: `Title: ${result.title} \n Description: ${result.description} \n Status: ${result.status}`,
             },
           });
   

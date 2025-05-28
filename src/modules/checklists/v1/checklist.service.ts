@@ -140,57 +140,33 @@ export class ChecklistService {
     try {
       const { items: userItems = [] } = dto;
 
-      // Load template and existing checklist
-      const [template, existing] = await Promise.all([
-        this.prisma.checklistTemplate.findUnique({
-          where: { id: templateId },
-          include: { items: true },
-        }),
-        this.prisma.projectChecklist.findUnique({
-          where: { projectId_templateId: { projectId, templateId } },
-          include: { items: true },
-        }),
-      ]);
-      if (!template)
-        throw new NotFoundException(`Template ${templateId} not found`);
-
-      // Normalize and sort template items
-      const rawTemplate = template.items.map((item, idx) => ({
-        ...item,
-        originalIndex: idx,
-      }));
-      const templWithOrder = rawTemplate
-        .filter((i) => i.order != null)
-        .sort((a, b) => a.order - b.order || a.originalIndex - b.originalIndex);
-      const templWithoutOrder = rawTemplate.filter((i) => i.order == null);
-      const orderedTemplate = [...templWithOrder, ...templWithoutOrder];
-      const templateToCreate = orderedTemplate.map((i, idx) => ({
-        templateItemId: i.id,
-        order: idx + 1,
-        question: i.question,
-        userId,
-      }));
+      const existing = await this.prisma.projectChecklist.findUnique({
+        where: { projectId_templateId: { projectId, templateId } },
+        include: { items: true },
+      });
 
       if (!existing) {
-        // Create new checklist: combine template and user items
-        const combined = [...templateToCreate];
-        userItems.forEach((ui) => {
-          combined.push({
-            templateItemId: null,
-            order: combined.length + 1,
-            question: ui.question,
-            userId,
-          });
-        });
+        // Create new checklist with only user-provided items, preserving order
+        const orderedUserItems = userItems.map((item, idx) => ({
+          templateItemId: null,
+          order: idx + 1,
+          question: item.question,
+          userId,
+        }));
 
         const created = await this.prisma.projectChecklist.create({
           data: {
             projectId,
             templateId,
-            items: { create: combined },
+            items: { create: orderedUserItems },
           },
-          include: { items: true },
+          include: {
+            items: {
+              orderBy: { order: "asc" },
+            },
+          },
         });
+
         this.logger.log(`Created project checklist ${created.id}`);
         return {
           message: "Project checklist created successfully",
@@ -198,34 +174,14 @@ export class ChecklistService {
         };
       }
 
-      // Existing checklist: append only new template items first
-      const checklistId = existing.id;
-      const existingTemplIds = new Set(
-        existing.items.map((i) => i.templateItemId),
-      );
-      let nextOrder = existing.items.length;
-      const newTemplForAppend = orderedTemplate.filter(
-        (i) => !existingTemplIds.has(i.id),
-      );
-      for (const ti of newTemplForAppend) {
-        nextOrder++;
-        await this.prisma.projectChecklistItem.create({
-          data: {
-            projectChecklistId: checklistId,
-            templateItemId: ti.id,
-            order: nextOrder,
-            question: ti.question,
-            userId,
-          },
-        });
-      }
+      // Append new user-provided items at the end, preserving sequence
+      let nextOrder = Math.max(0, ...existing.items.map((i) => i.order || 0));
 
-      // Then append any user-provided items
       for (const ui of userItems) {
-        nextOrder++;
+        nextOrder++; // increment from max existing order
         await this.prisma.projectChecklistItem.create({
           data: {
-            projectChecklistId: checklistId,
+            projectChecklistId: existing.id,
             templateItemId: null,
             order: nextOrder,
             question: ui.question,
@@ -234,15 +190,13 @@ export class ChecklistService {
         });
       }
 
-      // Reload full checklist
       const updated = await this.prisma.projectChecklist.findUnique({
         where: { projectId_templateId: { projectId, templateId } },
         include: {
-          items: {
-            orderBy: { order: "asc" },
-          },
+          items: { orderBy: { order: "asc" } },
         },
       });
+
       this.logger.log(`Updated project checklist ${updated.id}`);
       return {
         message: "Project checklist updated successfully",
@@ -300,7 +254,7 @@ export class ChecklistService {
   }> {
     try {
       const checklist = await this.prisma.projectChecklist.findUnique({
-        where: { id: checklistId },
+        where: { id: checklistId, projectId },
         include: {
           template: { select: { id: true, name: true, description: true } },
           items: {

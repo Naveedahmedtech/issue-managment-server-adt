@@ -4,7 +4,7 @@ import { diskStorage } from "multer";
 import { extname, basename } from "path";
 import * as fs from "fs";
 
-export function FileUploadInterceptor(destinationPath: string, maxFiles = 10, maxFileSizeMB = 5) {
+export function FileUploadInterceptor(destinationPath: string, maxFiles = 10, maxFileSizeMB = 100) {
   const logger = new Logger("FileUploadInterceptor");
   return applyDecorators(
     UseInterceptors(
