@@ -11,7 +11,7 @@ export async function setupApp(app: INestApplication) {
       "http://localhost:5173",
       "http://localhost:4200",
       "http://localhost:51142",
-      "http://192.168.18.65:5173",
+      "http://192.168.18.125:5173",
       "http://192.168.18.65:4200",
     ],
     credentials: true,
