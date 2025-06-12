@@ -453,4 +453,81 @@ export class ChecklistService {
       throw error;
     }
   }
+
+  async getChecklistLogsByProject(
+    page: number,
+    limit: number,
+    projectId: string,
+  ) {
+    const offset = (page - 1) * limit;
+
+    const checklistItems = await this.prisma.projectChecklistItem.findMany({
+      where: {
+        projectChecklist: {
+          projectId: projectId,
+        },
+      },
+      select: { id: true },
+    });
+
+    const checklistItemIds = checklistItems.map((item) => item.id);
+
+    const logs = await this.prisma.projectChecklistItemLog.findMany({
+      where: { checklistItemId: { in: checklistItemIds } },
+      skip: offset,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: {
+        changedBy: { select: { id: true, displayName: true } },
+        checklistItem: {
+          select: { question: true, id: true },
+        },
+      },
+    });
+
+    // Fetch related files for logs where field is 'attachmentFileId'
+    // 1. Extract all file IDs from oldValue and newValue
+    const fileIds = [
+      ...new Set(
+        logs
+          .filter((log) => log.changedField === "attachmentFileId")
+          .flatMap((log) => [log.oldValue, log.newValue])
+          .filter((id) => !!id),
+      ),
+    ];
+
+    // 2. Fetch file data
+    const files = await this.prisma.checklistFile.findMany({
+      where: { id: { in: fileIds } },
+      select: { id: true, filePath: true },
+    });
+
+    const fileMap = Object.fromEntries(
+      files.map((file) => [file.id, file.filePath]),
+    );
+
+    // 3. Enhance logs
+    const logsWithFileInfo = logs.map((log) => {
+      if (log.changedField === "attachmentFileId") {
+        return {
+          ...log,
+          oldFilePath: fileMap[log.oldValue] || null,
+          newFilePath: fileMap[log.newValue] || null,
+        };
+      }
+      return log;
+    });
+
+    const totalLogs = await this.prisma.projectChecklistItemLog.count({
+      where: { checklistItemId: { in: checklistItemIds } },
+    });
+
+    return {
+      total: totalLogs,
+      page,
+      limit,
+      totalPages: Math.ceil(totalLogs / limit),
+      logs: logsWithFileInfo,
+    };
+  }
 }

@@ -8,33 +8,34 @@ datasource db {
 }
 
 model User {
-  id                   String                 @id @default(uuid()) @db.Uuid
-  email                String                 @unique
-  password             String?
-  name                 String?
-  azureId              String?                @unique
-  displayName          String? // Corresponds to 'displayName' in Graph API
-  mailNickname         String? // Corresponds to 'mailNickname' in Graph API
-  userPrincipalName    String? // Corresponds to 'userPrincipalName' in Graph API
-  accountEnabled       Boolean? // Corresponds to 'accountEnabled' in Graph API
-  deleted_at           DateTime?
-  is_deleted           Boolean                @default(false)
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  roleId               String?                @db.Uuid
-  role                 Role?                  @relation("UserRole", fields: [roleId], references: [id], onDelete: SetNull)
-  userPermissions      UserPermission[]
-  projects             Project[]
-  Issue                Issue[]
-  Order                Order[]
-  IssueHistory         IssueHistory[]
-  assignedUsers        IssueAssignment[]
-  assignedProjects     ProjectAssignment[]
-  comments             Comment[]
-  Availability         Availability[]
-  ChecklistTemplate    ChecklistTemplate[]
-  ProjectChecklist     ProjectChecklist[]
-  ProjectChecklistItem ProjectChecklistItem[]
+  id                      String                    @id @default(uuid()) @db.Uuid
+  email                   String                    @unique
+  password                String?
+  name                    String?
+  azureId                 String?                   @unique
+  displayName             String? // Corresponds to 'displayName' in Graph API
+  mailNickname            String? // Corresponds to 'mailNickname' in Graph API
+  userPrincipalName       String? // Corresponds to 'userPrincipalName' in Graph API
+  accountEnabled          Boolean? // Corresponds to 'accountEnabled' in Graph API
+  deleted_at              DateTime?
+  is_deleted              Boolean                   @default(false)
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+  roleId                  String?                   @db.Uuid
+  role                    Role?                     @relation("UserRole", fields: [roleId], references: [id], onDelete: SetNull)
+  userPermissions         UserPermission[]
+  projects                Project[]
+  Issue                   Issue[]
+  Order                   Order[]
+  IssueHistory            IssueHistory[]
+  assignedUsers           IssueAssignment[]
+  assignedProjects        ProjectAssignment[]
+  comments                Comment[]
+  Availability            Availability[]
+  ChecklistTemplate       ChecklistTemplate[]
+  ProjectChecklist        ProjectChecklist[]
+  ProjectChecklistItem    ProjectChecklistItem[]
+  ProjectChecklistItemLog ProjectChecklistItemLog[]
 }
 
 model Role {
@@ -214,8 +215,24 @@ model ProjectChecklistItem {
   userId           String         @db.Uuid
   user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+  ProjectChecklistItemLog ProjectChecklistItemLog[]
+  IssueHistory            IssueHistory[]
+}
+
+model ProjectChecklistItemLog {
+  id              String               @id @default(uuid()) @db.Uuid
+  checklistItemId String               @db.Uuid
+  checklistItem   ProjectChecklistItem @relation(fields: [checklistItemId], references: [id], onDelete: Cascade)
+
+  changedField    String // e.g., "answer", "comment", "attachmentFileId", "userId"
+  oldValue        String? // store previous value as string
+  newValue        String? // store new value as string
+  changedByUserId String  @db.Uuid
+  changedBy       User    @relation(fields: [changedByUserId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
 
 model Issue {
@@ -264,15 +281,18 @@ model IssueAssignment {
 }
 
 model IssueHistory {
-  id        String   @id @default(uuid()) @db.Uuid
-  issueId   String   @db.Uuid
-  userId    String   @db.Uuid
-  fieldName String // Name of the field that was changed (e.g., "status", "description")
-  oldValue  String? // Previous value of the field
-  newValue  String? // New value of the field
-  createdAt DateTime @default(now())
-  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String                @id @default(uuid()) @db.Uuid
+  issueId         String?               @db.Uuid
+  checklistItemId String?               @db.Uuid
+  userId          String                @db.Uuid
+  type            String                @default("ISSUES")
+  fieldName       String // Name of the field that was changed (e.g., "status", "description")
+  oldValue        String? // Previous value of the field
+  newValue        String? // New value of the field
+  createdAt       DateTime              @default(now())
+  issue           Issue?                @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  checklistItem   ProjectChecklistItem? @relation(fields: [checklistItemId], references: [id], onDelete: Cascade)
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Order {

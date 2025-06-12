@@ -8,6 +8,7 @@ import {
   UseGuards,
   UploadedFiles,
   Delete,
+  Query,
 } from "@nestjs/common";
 import { ChecklistService } from "./checklist.service";
 import { Request } from "express";
@@ -83,11 +84,9 @@ export class ChecklistTemplateController {
     @Param("projectId") projectId: string,
     @Param("checklistItemId") checklistItemId: string,
   ) {
-    return await this.svc.uploadFiles(req, files, projectId,checklistItemId);
+    return await this.svc.uploadFiles(req, files, projectId, checklistItemId);
   }
 
-
-  
   @Delete("/:projectId/projects/:checklistId/item/:itemId")
   deleteProjectChecklistItem(
     @Param("projectId") projectId: string,
@@ -97,4 +96,19 @@ export class ChecklistTemplateController {
     return this.svc.deleteProjectChecklistItem(projectId, checklistId, itemId);
   }
 
+  @Get("/:projectId/logs")
+  async getLogsByProject(
+    @Query("page") page: string,
+    @Query("limit") limit: string,
+    @Param("projectId") projectId: string,
+
+  ) {
+    const pageNumber = parseInt(page, 10) || 1;
+    const limitNumber = parseInt(limit, 10) || 10;
+    return this.svc.getChecklistLogsByProject(
+      pageNumber,
+      limitNumber,
+      projectId,
+    );
+  }
 }

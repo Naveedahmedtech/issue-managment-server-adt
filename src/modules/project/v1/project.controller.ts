@@ -312,7 +312,7 @@ export class ProjectController {
     @Param("projectId") projectId: string,
     @Query("page") page: string,
     @Query("limit") limit: string,
-    @Query("issueId") issueId: string,
+    @Query("type") type: string,
   ) {
     const pageNumber = parseInt(page, 10) || 1;
     const limitNumber = parseInt(limit, 10) || 10;
@@ -320,7 +320,7 @@ export class ProjectController {
       projectId,
       pageNumber,
       limitNumber,
-      issueId,
+      type,
     );
   }
 

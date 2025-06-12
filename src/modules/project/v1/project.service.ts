@@ -113,6 +113,7 @@ export class ProjectService {
           data: {
             projectId: newProject.id,
             templateId: defaultTemplate.id,
+            userId,
             items: {
               create: ordered.map((i, idx) => ({
                 templateItemId: i.id,
@@ -370,6 +371,51 @@ export class ProjectService {
         where: { projectId },
         select: { id: true, filePath: true, createdAt: true, updatedAt: true },
       });
+
+      const defaultOrderFilePath = pathPosix.join(
+        "uploads",
+        "orders",
+        "Service English.pdf",
+      );
+      if (data.isOrder === "true") {
+                const existedOrderFile = await this.prisma.file.findFirst({
+          where: {
+            isOrder: true,
+            filePath: defaultOrderFilePath,
+            projectId,
+          },
+        });
+        if(!existedOrderFile) {
+          await this.prisma.file.create({
+            data: {
+              projectId: projectId,
+              filePath: defaultOrderFilePath,
+              isOrder: true,
+            },
+          });
+          this.logger.log(`Attached default order file to project ${projectId}`);
+        } else {
+          this.logger.log(`default order file is alrady attached to project ${projectId}`);
+
+        }
+      }
+      if (data.isOrder === "false") {
+        const existedOrderFile = await this.prisma.file.findFirst({
+          where: {
+            isOrder: true,
+            filePath: defaultOrderFilePath,
+            projectId,
+          },
+        });
+                if(existedOrderFile) {
+        await this.prisma.file.delete({
+          where: {
+            id: existedOrderFile.id,
+          },
+        });
+        this.logger.log(`default order file deleted in project ${projectId}`);
+        } 
+      }
 
       this.logger.log(`Project updated successfully: ${updatedProject.id}`);
       return {
@@ -936,9 +982,19 @@ export class ProjectService {
           projectId: projectId,
         },
       });
+      const defaultOrderFilePath = pathPosix.join(
+        "uploads",
+        "orders",
+        "Service English.pdf",
+      );
 
-      // Delete project files from the file system
+      // Delete project files from the file system, except "Service English.pdf"
       for (const file of files) {
+        if (file.filePath === defaultOrderFilePath) {
+          this.logger.log(`Skipping protected file: ${file.filePath}`);
+          continue;
+        }
+
         try {
           await unlink(join("./", file.filePath));
           this.logger.log(`Deleted file from disk: ${file.filePath}`);
@@ -950,10 +1006,13 @@ export class ProjectService {
         }
       }
 
-      // Delete files from the database
+      // Delete files from the database, except "Service English.pdf"
       await this.prisma.file.deleteMany({
         where: {
           projectId: projectId,
+          NOT: {
+            filePath: defaultOrderFilePath,
+          },
         },
       });
 
@@ -1112,6 +1171,20 @@ export class ProjectService {
           files: {
             orderBy: { createdAt: "desc" },
           },
+          ProjectChecklist: {
+            include: {
+              template: true,
+              User: true,
+              items: {
+                orderBy: { order: "asc" },
+                include: {
+                  attachmentFile: true,
+                  user: true,
+                  templateItem: true,
+                },
+              },
+            },
+          },
         },
       });
 
@@ -1134,6 +1207,7 @@ export class ProjectService {
       const buffers: Buffer[] = [];
 
       doc.on("data", (chunk) => buffers.push(chunk));
+
       doc.on("error", (error) => {
         throw new Error(`PDF generation error: ${error.message}`);
       });
@@ -1266,6 +1340,58 @@ export class ProjectService {
 
         doc.moveDown(1.5); // Space between issues
       });
+
+      // === Checklist Section ===
+      if (project.ProjectChecklist && project.ProjectChecklist.length > 0) {
+        doc.addPage(); // Optional: separate page
+        doc.fontSize(16).text("Project Checklists", { underline: true });
+        doc.moveDown();
+
+        project.ProjectChecklist.forEach((checklist, idx) => {
+          doc
+            .fontSize(14)
+            .fillColor("black")
+            .text(`Checklist ${idx + 1}: ${checklist.template.name}`);
+          doc
+            .fontSize(12)
+            .text(`Created by: ${checklist.User?.displayName || "N/A"}`);
+          doc.text(
+            `Created at: ${new Date(checklist.createdAt).toLocaleString()}`,
+          );
+          doc.moveDown(0.5);
+
+          checklist.items.forEach((item, iIdx) => {
+            const answer =
+              item.answer === true
+                ? "Yes"
+                : item.answer === false
+                  ? "No"
+                  : "Unanswered";
+
+            doc
+              .fontSize(12)
+              .text(`${iIdx + 1}. ${item.question}`)
+              .text(`   Answer: ${answer}`)
+              .text(`   Comment: ${item.comment || "None"}`)
+              .text(
+                `   By: ${item.user?.displayName || "N/A"} at ${new Date(item.createdAt).toLocaleString()}`,
+              );
+
+            if (item.attachmentFile) {
+              const fileName = path.basename(item.attachmentFile.filePath);
+              const fileUrl = `${process.env.SERVER_URL || "http://localhost:3000"}/${item.attachmentFile.filePath}`;
+              doc.fillColor("blue").text(`   Attachment: ${fileName}`, {
+                link: fileUrl,
+                underline: true,
+              });
+            }
+
+            doc.moveDown(0.5);
+          });
+
+          doc.moveDown();
+        });
+      }
 
       // === Footer Section ===
       doc.moveTo(50, 750).lineTo(550, 750).stroke();
@@ -1553,60 +1679,105 @@ export class ProjectService {
     projectId: string,
     page: number = 1,
     limit: number = 10,
-    issueId?: string,
+    type?: string, // "ISSUES" | "CHECKLIST"
   ) {
     try {
       const offset = (page - 1) * limit;
 
-      // Build the base `where` clause
-      const whereClause: any = {
-        issue: {
-          projectId: projectId,
+      const baseWhere: any = {
+        NOT: {
+          oldValue: null,
+          newValue: null,
         },
       };
 
-      // Add issueId to the `where` clause if provided
-      if (issueId) {
-        whereClause.issue.id = issueId;
-      }
-
-      // Fetch the issue history logs for the given projectId or issueId
-      const history = await this.prisma.issueHistory.findMany({
-        where: whereClause,
-        orderBy: {
-          createdAt: "desc", // Order by latest logs
-        },
-        skip: offset,
-        take: limit,
-        include: {
-          user: {
-            select: {
-              email: true,
-              displayName: true,
+      // Apply type-specific filtering
+      if (type === "ISSUES") {
+        baseWhere.type = "ISSUES";
+        baseWhere.issue = { projectId };
+      } else if (type === "CHECKLIST") {
+        baseWhere.type = "CHECKLIST";
+        baseWhere.checklistItem = {
+          projectChecklist: { projectId },
+        };
+      } else {
+        // Include both types for the project
+        baseWhere.OR = [
+          {
+            type: "ISSUES",
+            issue: { projectId },
+          },
+          {
+            type: "CHECKLIST",
+            checklistItem: {
+              projectChecklist: { projectId },
             },
           },
+        ];
+      }
+
+      const logs = await this.prisma.issueHistory.findMany({
+        where: baseWhere,
+        skip: offset,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+        include: {
+          user: { select: { id: true, displayName: true, email: true } },
+          issue: { select: { id: true, title: true } },
+          checklistItem: { select: { id: true, question: true } },
         },
       });
 
-      // Count total history logs for the project or specific issue
-      const totalHistory = await this.prisma.issueHistory.count({
-        where: whereClause,
-      });
+      // Collect file references
+      const fileIds = [
+        ...new Set(
+          logs
+            .filter(
+              (log) =>
+                log.type === "CHECKLIST" &&
+                log.fieldName === "attachmentFileId",
+            )
+            .flatMap((log) => [log.oldValue, log.newValue])
+            .filter(Boolean),
+        ),
+      ];
 
-      const response = {
-        total: totalHistory,
-        page,
-        limit,
-        totalPages: Math.ceil(totalHistory / limit),
-        history,
-      };
+      const fileMap = fileIds.length
+        ? Object.fromEntries(
+            (
+              await this.prisma.checklistFile.findMany({
+                where: { id: { in: fileIds } },
+                select: { id: true, filePath: true },
+              })
+            ).map((file) => [file.id, file.filePath]),
+          )
+        : {};
+
+      // Add file paths to applicable logs
+      const enrichedLogs = logs.map((log) =>
+        log.type === "CHECKLIST" && log.fieldName === "attachmentFileId"
+          ? {
+              ...log,
+              oldFilePath: fileMap[log.oldValue] || null,
+              newFilePath: fileMap[log.newValue] || null,
+            }
+          : log,
+      );
+
+      const total = await this.prisma.issueHistory.count({ where: baseWhere });
 
       return {
-        message: "Issue history fetched successfully",
-        data: response,
+        message: "History logs fetched successfully",
+        data: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+          history: enrichedLogs,
+        },
       };
     } catch (error) {
-      this.logger.error("Failed to fetch issue history logs", error);
+      this.logger.error("Failed to fetch issue/checklist history logs", error);
       throw error;
     }
   }
