@@ -74,9 +74,9 @@ export class IssueController {
     return await this.issueService.removeUserFromIssue(issueId, userId);
   }
 
-  @UseGuards(AuthGuard)
+  // @UseGuards(AuthGuard)
   @Delete(":issueId")
-  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
+  // @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
   async deleteIssue(@Param("issueId") issueId: string) {
     return await this.issueService.deleteIssue(issueId);
   }

@@ -18,7 +18,7 @@ export class CompanyService {
       this.logger.log(`Company created successfully: ${company.id}`);
       return company;
     } catch (error) {
-      this.logger.error("Error creating company", { name, error });
+      this.logger.error("Error creating company", error );
       throw new InternalServerErrorException("Failed to create company");
     }
   }

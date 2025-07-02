@@ -25,7 +25,17 @@ export class OrderService {
   ) {
     try {
       const { id: userId } = req.userDetails;
+      if (req.body.companyId) {
+        const company = await this.prisma.company.findUnique({
+          where: {
+            id: req.body.companyId,
+          },
+        });
 
+        if (!company) {
+          throw new NotFoundException("Company not found!");
+        }
+      }
       const newOrder = await this.prisma.order.create({
         data: {
           name: req.body.name,
@@ -36,7 +46,10 @@ export class OrderService {
           companyName: req.body?.companyName ? req.body?.companyName : "",
           startDate: req.body?.startDate ? new Date(req.body?.startDate) : null,
           endDate: req.body?.endDate ? new Date(req.body?.endDate) : null,
-          userId,
+          user: { connect: { id: userId } },
+          ...(req.body.companyId && {
+            company: { connect: { id: req.body.companyId } },
+          }),
         },
       });
 
@@ -78,7 +91,17 @@ export class OrderService {
   ) {
     try {
       const normalizedBody = normalizeKeys(req.body) as any;
+      if (normalizedBody.companyId) {
+        const company = await this.prisma.company.findUnique({
+          where: {
+            id: normalizedBody.companyId,
+          },
+        });
 
+        if (!company) {
+          throw new NotFoundException("Company not found!");
+        }
+      }
       // Build update data
       const updateData: any = {
         ...(normalizedBody.name && { name: normalizedBody.name }),
@@ -98,6 +121,9 @@ export class OrderService {
         }),
         ...(normalizedBody.endDate && {
           endDate: new Date(normalizedBody.endDate),
+        }),
+        ...(normalizedBody.companyId && {
+          company: { connect: { id: req.body.companyId } },
         }),
       };
 
@@ -327,6 +353,12 @@ export class OrderService {
               createdAt: 'desc'
             }
           },
+          company: {
+            select: {
+              id: true,
+              name: true,
+            }
+          }
         },
       });
 

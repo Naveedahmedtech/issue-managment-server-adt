@@ -13,6 +13,8 @@ import { OrderModule } from "./modules/order/v1/order.module";
 import { ConfigModule } from '@nestjs/config';
 import { UniversalModule } from "./modules/universal/v1/universal.module";
 import { CompanyModule } from "./modules/company/v1/company.module";
+import {CommentsModule} from "./modules/comments/comments.module";
+import { ChecklistModule } from "./modules/checklists/v1/checklist.module";
 
 @Module({
   imports: [
@@ -28,11 +30,13 @@ import { CompanyModule } from "./modules/company/v1/company.module";
     RoleModule,
     PermissionModule,
     UserModule,
-    ProjectModule,
+    ProjectModule, 
     IssueModule,
     OrderModule,
     UniversalModule,
-    CompanyModule
+    CompanyModule,
+    CommentsModule,
+    ChecklistModule
   ],
   controllers: [AppController],
   providers: [AppService],

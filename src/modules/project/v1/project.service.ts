@@ -13,6 +13,7 @@ import { posix as pathPosix } from "path";
 import * as PDFDocument from "pdfkit";
 import * as path from "path";
 import { promises as fs } from "fs";
+import { getISOWeek } from "src/utils/date-utils";
 
 @Injectable()
 export class ProjectService {
@@ -28,39 +29,160 @@ export class ProjectService {
     try {
       const { id: userId } = req.userDetails;
 
+      // 1) Validate companyId as before…
       if (body.companyId) {
         const company = await this.prisma.company.findUnique({
-          where: {
-            id: body.companyId,
-          },
+          where: { id: body.companyId },
         });
+        if (!company) throw new NotFoundException("Company not found!");
+      }
 
-        if (!company) {
-          throw new NotFoundException("Company not found!");
+      // 2) Parse the project dates up front
+      const startDt = body.startDate ? new Date(body.startDate) : null;
+      const endDt = body.endDate ? new Date(body.endDate) : null;
+
+      // 3) If you’ve got userIds to assign, check conflicts
+      let candidates: string[] = [];
+      if (body.userIds && startDt && endDt) {
+        const parsedUserIds: string[] = JSON.parse(body.userIds);
+        if (parsedUserIds.length) {
+          // find any existing availability overlapping this window, including username
+          const conflicts = await this.prisma.availability.findMany({
+            where: {
+              userId: { in: parsedUserIds },
+              AND: [
+                { startDate: { lte: endDt } },
+                { endDate: { gte: startDt } },
+              ],
+            },
+            select: {
+              user: {
+                select: { displayName: true },
+              },
+            },
+          });
+
+          if (conflicts.length) {
+            // extract unique usernames
+            const conflictNames = Array.from(
+              new Set(conflicts.map((c) => c.user.displayName)),
+            );
+            throw new BadRequestException(
+              `Cannot assign users [${conflictNames.join(
+                ", ",
+              )}] — they already have availability in that timeframe.`,
+            );
+          }
+
+          // If no conflicts, keep them for your createMany below
+          candidates = parsedUserIds;
         }
       }
 
+      // 4) Create the Project
       const newProject = await this.prisma.project.create({
         data: {
           title: body.title,
           description: body.description,
           status: body.status?.toUpperCase(),
-          startDate: !body.startDate ? null : new Date(body.startDate),
-          endDate: !body.endDate ? null : new Date(body.endDate),
+          startDate: startDt,
+          endDate: endDt,
+          startWeek: startDt ? getISOWeek(startDt) : null,
+          endWeek: endDt ? getISOWeek(endDt) : null,
           userId,
           companyId: body.companyId || null,
+          isOrder: body.isOrder === "true" || false,
         },
       });
 
-      if (files && files.length > 0) {
+      // ——— NEW: assign the default checklist template ———
+      const defaultTemplate = await this.prisma.checklistTemplate.findFirst({
+        where: { isDefault: true },
+        include: { items: true },
+      });
+      if (defaultTemplate) {
+        // copy & re-sequence its items exactly like upsertProjectChecklist does
+        const raw = defaultTemplate.items.map((i, idx) => ({ ...i, idx }));
+        const withOrder = raw
+          .filter((i) => i.order != null)
+          .sort((a, b) => a.order - b.order || a.idx - b.idx);
+        const withoutOrder = raw.filter((i) => i.order == null);
+        const ordered = [...withOrder, ...withoutOrder];
+
+        await this.prisma.projectChecklist.create({
+          data: {
+            projectId: newProject.id,
+            templateId: defaultTemplate.id,
+            userId,
+            items: {
+              create: ordered.map((i, idx) => ({
+                templateItemId: i.id,
+                order: idx + 1,
+                question: i.question,
+                userId, // track who seeded it
+              })),
+            },
+          },
+        });
+        this.logger.log(
+          `Assigned default checklist ${defaultTemplate.id} to project ${newProject.id}`,
+        );
+      }
+
+      // 5) Seed assignments & availabilities in one shot
+      if (candidates.length) {
+        // a) assignments
+        await this.prisma.projectAssignment.createMany({
+          data: candidates.map((uid) => ({
+            projectId: newProject.id,
+            userId: uid,
+          })),
+          skipDuplicates: true,
+        });
+
+        // b) availabilities
+        await this.prisma.availability.createMany({
+          data: candidates.map((uid) => ({
+            projectId: newProject.id,
+            userId: uid,
+            startDate: startDt,
+            endDate: endDt,
+            startWeek: getISOWeek(startDt),
+            endWeek: getISOWeek(endDt),
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      // 6) File handling as before…
+      if (files.length) {
         for (const file of files) {
           await this.prisma.file.create({
             data: {
               projectId: newProject.id,
               filePath: pathPosix.join("uploads", "projects", file.filename),
+              isOrder: body.isOrder === "true",
             },
           });
         }
+      }
+
+      if (body.isOrder === "true") {
+        const defaultOrderFilePath = pathPosix.join(
+          "uploads",
+          "orders",
+          "Service English.pdf",
+        );
+        await this.prisma.file.create({
+          data: {
+            projectId: newProject.id,
+            filePath: defaultOrderFilePath,
+            isOrder: true,
+          },
+        });
+        this.logger.log(
+          `Attached default order file to project ${newProject.id}`,
+        );
       }
 
       this.logger.log(`Project created successfully: ${newProject.id}`);
@@ -92,69 +214,211 @@ export class ProjectService {
     try {
       const { id: userId } = req.userDetails;
 
-      // Build update data
+      // 1) Load existing project dates for fallback & ensure project exists
+      const existingProject = await this.prisma.project.findUnique({
+        where: { id: projectId },
+        select: { startDate: true, endDate: true },
+      });
+      if (!existingProject) {
+        throw new NotFoundException(`Project ${projectId} not found`);
+      }
+
+      // 2) Compute effective date window
+      const startDt = data.startDate
+        ? new Date(data.startDate)
+        : existingProject.startDate;
+      const endDt = data.endDate
+        ? new Date(data.endDate)
+        : existingProject.endDate;
+
+      // 3) Conflict check: ensure new assignments don’t overlap other projects
+      if (data.userIds && startDt && endDt) {
+        const parsedUserIds: string[] = JSON.parse(data.userIds);
+        if (parsedUserIds.length) {
+          const conflicts = await this.prisma.availability.findMany({
+            where: {
+              userId: { in: parsedUserIds },
+              projectId: { not: projectId },
+              AND: [
+                { startDate: { lte: endDt } },
+                { endDate: { gte: startDt } },
+              ],
+            },
+            select: {
+              user: { select: { displayName: true } },
+            },
+          });
+
+          if (conflicts.length) {
+            const names = Array.from(
+              new Set(conflicts.map((c) => c.user.displayName)),
+            );
+            throw new BadRequestException(
+              `Cannot assign users [${names.join(
+                ", ",
+              )}] — they’re already booked in that timeframe.`,
+            );
+          }
+        }
+      }
+
+      // 4) Build project-update payload
       const updateData: any = {
         ...(data.title && { title: data.title }),
-        ...(data.description && {
-          description: data.description,
-        }),
-        ...(data.status && { status: data.status?.toUpperCase() }),
-        ...(data.startDate && {
-          startDate: !data.startDate ? null : new Date(data.startDate),
-        }),
-        ...(data.endDate && {
-          endDate: !data.endDate ? null : new Date(data.endDate),
-        }),
+        ...(data.description && { description: data.description }),
+        ...(data.status && { status: data.status.toUpperCase() }),
+        startDate: startDt,
+        endDate: endDt,
         ...(data.companyId && { companyId: data.companyId }),
+        ...(data.isOrder && { isOrder: data.isOrder === "true" }),
         userId,
       };
 
-      // Update project details
+      // 5) Apply project update
       const updatedProject = await this.prisma.project.update({
         where: { id: projectId },
         data: updateData,
       });
 
-      // Get existing files for this project
+      // 6) Sync all existing availabilities if dates changed
+      if (data.startDate || data.endDate) {
+        await this.prisma.availability.updateMany({
+          where: { projectId },
+          data: {
+            startDate: startDt,
+            endDate: endDt,
+            startWeek: startDt ? getISOWeek(startDt) : null,
+            endWeek: endDt ? getISOWeek(endDt) : null,
+          },
+        });
+      }
+
+      // 7) Handle assigned users & reconcile availability
+      if (data.userIds) {
+        const parsedUserIds: string[] = JSON.parse(data.userIds);
+
+        // a) Load previous assignments
+        const prev = await this.prisma.projectAssignment.findMany({
+          where: { projectId },
+          select: { userId: true },
+        });
+        const prevUserIds = prev.map((a) => a.userId);
+
+        // b) Delete old assignments, then add new
+        await this.prisma.projectAssignment.deleteMany({
+          where: { projectId },
+        });
+        if (parsedUserIds.length) {
+          await this.prisma.projectAssignment.createMany({
+            data: parsedUserIds.map((uid) => ({ projectId, userId: uid })),
+            skipDuplicates: true,
+          });
+        }
+
+        // c) Remove availabilities for users no longer assigned
+        const removed = prevUserIds.filter(
+          (uid) => !parsedUserIds.includes(uid),
+        );
+        if (removed.length) {
+          await this.prisma.availability.deleteMany({
+            where: {
+              projectId,
+              userId: { in: removed },
+            },
+          });
+        }
+
+        // d) Seed availabilities for newly assigned users
+        const added = parsedUserIds.filter((uid) => !prevUserIds.includes(uid));
+        if (added.length && startDt && endDt) {
+          await this.prisma.availability.createMany({
+            data: added.map((uid) => ({
+              projectId,
+              userId: uid,
+              startDate: startDt,
+              endDate: endDt,
+              startWeek: getISOWeek(startDt),
+              endWeek: getISOWeek(endDt),
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      // 8) File-upload handling
       const existingFiles = await this.prisma.file.findMany({
         where: { projectId },
-        select: {
-          id: true,
-          filePath: true,
-        },
+        select: { filePath: true },
       });
-
-      // Extract filenames of already uploaded files
-      const existingFileNames = existingFiles.map((file) =>
-        pathPosix.basename(file.filePath),
+      const existingNames = existingFiles.map((f) =>
+        pathPosix.basename(f.filePath),
       );
-
-      // Add new files if they are not duplicates
-      const newFiles = files.filter(
-        (file) => !existingFileNames.includes(file.filename),
-      );
-
-      if (newFiles.length > 0) {
+      const newFiles = files.filter((f) => !existingNames.includes(f.filename));
+      if (newFiles.length) {
         for (const file of newFiles) {
           await this.prisma.file.create({
             data: {
               projectId: updatedProject.id,
               filePath: pathPosix.join("uploads", "projects", file.filename),
+              isOrder: data.isOrder === "true",
             },
           });
         }
       }
 
-      // Return updated project with files
+      // 9) Return updated project + files
       const allFiles = await this.prisma.file.findMany({
         where: { projectId },
-        select: {
-          id: true,
-          filePath: true,
-          createdAt: true,
-          updatedAt: true,
-        },
+        select: { id: true, filePath: true, createdAt: true, updatedAt: true },
       });
+
+      const defaultOrderFilePath = pathPosix.join(
+        "uploads",
+        "orders",
+        "Service English.pdf",
+      );
+      if (data.isOrder === "true") {
+        const existedOrderFile = await this.prisma.file.findFirst({
+          where: {
+            isOrder: true,
+            filePath: defaultOrderFilePath,
+            projectId,
+          },
+        });
+        if (!existedOrderFile) {
+          await this.prisma.file.create({
+            data: {
+              projectId: projectId,
+              filePath: defaultOrderFilePath,
+              isOrder: true,
+            },
+          });
+          this.logger.log(
+            `Attached default order file to project ${projectId}`,
+          );
+        } else {
+          this.logger.log(
+            `default order file is alrady attached to project ${projectId}`,
+          );
+        }
+      }
+      if (data.isOrder === "false") {
+        const existedOrderFile = await this.prisma.file.findFirst({
+          where: {
+            isOrder: true,
+            filePath: defaultOrderFilePath,
+            projectId,
+          },
+        });
+        if (existedOrderFile) {
+          await this.prisma.file.delete({
+            where: {
+              id: existedOrderFile.id,
+            },
+          });
+          this.logger.log(`default order file deleted in project ${projectId}`);
+        }
+      }
 
       this.logger.log(`Project updated successfully: ${updatedProject.id}`);
       return {
@@ -165,13 +429,12 @@ export class ProjectService {
         },
       };
     } catch (error) {
-      // Error handling with cleanup for newly uploaded files
+      // Error handling & cleanup for newly uploaded files
       this.logger.error("Failed to update project", {
         message: error.message,
         stack: error,
       });
-
-      if (files && files.length > 0) {
+      if (files && files.length) {
         for (const file of files) {
           try {
             await unlink(join("./uploads/projects", file.filename));
@@ -181,7 +444,6 @@ export class ProjectService {
           }
         }
       }
-
       throw error;
     }
   }
@@ -189,6 +451,7 @@ export class ProjectService {
   async uploadFilesToProject(
     projectId: string,
     files: Array<Express.Multer.File>,
+    isOrder: string,
   ) {
     try {
       // Validate if the project exists
@@ -233,6 +496,7 @@ export class ProjectService {
             data: {
               projectId,
               filePath: pathPosix.join("uploads", "projects", file.filename),
+              isOrder: isOrder === "true",
             },
           });
         }
@@ -368,10 +632,10 @@ export class ProjectService {
                 select: {
                   id: true,
                   displayName: true,
-                }
-              }
-            }
-          }
+                },
+              },
+            },
+          },
         },
       });
 
@@ -414,7 +678,7 @@ export class ProjectService {
             select: {
               id: true,
               archived: true,
-              title: true
+              title: true,
             },
           },
           assignedUsers: {
@@ -452,7 +716,7 @@ export class ProjectService {
           project: {
             id: issue.project.id,
             archived: issue.project.archived,
-            title: issue.project.title
+            title: issue.project.title,
           },
           endDate: issue.endDate,
           files: issue.issueFiles.map((file) => ({
@@ -721,9 +985,19 @@ export class ProjectService {
           projectId: projectId,
         },
       });
+      const defaultOrderFilePath = pathPosix.join(
+        "uploads",
+        "orders",
+        "Service English.pdf",
+      );
 
-      // Delete project files from the file system
+      // Delete project files from the file system, except "Service English.pdf"
       for (const file of files) {
+        if (file.filePath === defaultOrderFilePath) {
+          this.logger.log(`Skipping protected file: ${file.filePath}`);
+          continue;
+        }
+
         try {
           await unlink(join("./", file.filePath));
           this.logger.log(`Deleted file from disk: ${file.filePath}`);
@@ -735,10 +1009,13 @@ export class ProjectService {
         }
       }
 
-      // Delete files from the database
+      // Delete files from the database, except "Service English.pdf"
       await this.prisma.file.deleteMany({
         where: {
           projectId: projectId,
+          NOT: {
+            filePath: defaultOrderFilePath,
+          },
         },
       });
 
@@ -760,7 +1037,9 @@ export class ProjectService {
   async getProjectStats() {
     try {
       // Fetch total project count
-      const totalProjects = await this.prisma.project.count();
+      const totalProjects = await this.prisma.project.count({
+        where: { archived: false },
+      });
 
       // Fetch total issue count
       const totalIssues = await this.prisma.issue.count();
@@ -775,7 +1054,7 @@ export class ProjectService {
       // Fetch total to-do issues count
       const totalToDoIssues = await this.prisma.issue.count({
         where: {
-          status: "ON GOING",
+          status: "ACTIVE",
         },
       });
 
@@ -897,6 +1176,20 @@ export class ProjectService {
           files: {
             orderBy: { createdAt: "desc" },
           },
+          ProjectChecklist: {
+            include: {
+              template: true,
+              User: true,
+              items: {
+                orderBy: { order: "asc" },
+                include: {
+                  attachmentFile: true,
+                  user: true,
+                  templateItem: true,
+                },
+              },
+            },
+          },
         },
       });
 
@@ -919,6 +1212,7 @@ export class ProjectService {
       const buffers: Buffer[] = [];
 
       doc.on("data", (chunk) => buffers.push(chunk));
+
       doc.on("error", (error) => {
         throw new Error(`PDF generation error: ${error.message}`);
       });
@@ -1051,6 +1345,58 @@ export class ProjectService {
 
         doc.moveDown(1.5); // Space between issues
       });
+
+      // === Checklist Section ===
+      if (project.ProjectChecklist && project.ProjectChecklist.length > 0) {
+        doc.addPage(); // Optional: separate page
+        doc.fontSize(16).text("Project Checklists", { underline: true });
+        doc.moveDown();
+
+        project.ProjectChecklist.forEach((checklist, idx) => {
+          doc
+            .fontSize(14)
+            .fillColor("black")
+            .text(`Checklist ${idx + 1}: ${checklist.template.name}`);
+          doc
+            .fontSize(12)
+            .text(`Created by: ${checklist.User?.displayName || "N/A"}`);
+          doc.text(
+            `Created at: ${new Date(checklist.createdAt).toLocaleString()}`,
+          );
+          doc.moveDown(0.5);
+
+          checklist.items.forEach((item, iIdx) => {
+            const answer =
+              item.answer === true
+                ? "Yes"
+                : item.answer === false
+                  ? "No"
+                  : "Unanswered";
+
+            doc
+              .fontSize(12)
+              .text(`${iIdx + 1}. ${item.question}`)
+              .text(`   Answer: ${answer}`)
+              .text(`   Comment: ${item.comment || "None"}`)
+              .text(
+                `   By: ${item.user?.displayName || "N/A"} at ${new Date(item.createdAt).toLocaleString()}`,
+              );
+
+            if (item.attachmentFile) {
+              const fileName = path.basename(item.attachmentFile.filePath);
+              const fileUrl = `${process.env.SERVER_URL || "http://localhost:3000"}/${item.attachmentFile.filePath}`;
+              doc.fillColor("blue").text(`   Attachment: ${fileName}`, {
+                link: fileUrl,
+                underline: true,
+              });
+            }
+
+            doc.moveDown(0.5);
+          });
+
+          doc.moveDown();
+        });
+      }
 
       // === Footer Section ===
       doc.moveTo(50, 750).lineTo(550, 750).stroke();
@@ -1338,159 +1684,247 @@ export class ProjectService {
     projectId: string,
     page: number = 1,
     limit: number = 10,
-    issueId?: string,
+    type?: string, // "ISSUES" | "CHECKLIST"
   ) {
     try {
       const offset = (page - 1) * limit;
 
-      // Build the base `where` clause
-      const whereClause: any = {
-        issue: {
-          projectId: projectId,
+      const baseWhere: any = {
+        NOT: {
+          oldValue: null,
+          newValue: null,
         },
       };
 
-      // Add issueId to the `where` clause if provided
-      if (issueId) {
-        whereClause.issue.id = issueId;
-      }
-
-      // Fetch the issue history logs for the given projectId or issueId
-      const history = await this.prisma.issueHistory.findMany({
-        where: whereClause,
-        orderBy: {
-          createdAt: "desc", // Order by latest logs
-        },
-        skip: offset,
-        take: limit,
-        include: {
-          user: {
-            select: {
-              email: true,
-              displayName: true,
+      // Apply type-specific filtering
+      if (type === "ISSUES") {
+        baseWhere.type = "ISSUES";
+        baseWhere.issue = { projectId };
+      } else if (type === "CHECKLIST") {
+        baseWhere.type = "CHECKLIST";
+        baseWhere.checklistItem = {
+          projectChecklist: { projectId },
+        };
+      } else {
+        // Include both types for the project
+        baseWhere.OR = [
+          {
+            type: "ISSUES",
+            issue: { projectId },
+          },
+          {
+            type: "CHECKLIST",
+            checklistItem: {
+              projectChecklist: { projectId },
             },
           },
+        ];
+      }
+
+      const logs = await this.prisma.issueHistory.findMany({
+        where: baseWhere,
+        skip: offset,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+        include: {
+          user: { select: { id: true, displayName: true, email: true } },
+          issue: { select: { id: true, title: true } },
+          checklistItem: { select: { id: true, question: true } },
         },
       });
 
-      // Count total history logs for the project or specific issue
-      const totalHistory = await this.prisma.issueHistory.count({
-        where: whereClause,
-      });
+      // Collect file references
+      const fileIds = [
+        ...new Set(
+          logs
+            .filter(
+              (log) =>
+                log.type === "CHECKLIST" &&
+                log.fieldName === "attachmentFileId",
+            )
+            .flatMap((log) => [log.oldValue, log.newValue])
+            .filter(Boolean),
+        ),
+      ];
 
-      const response = {
-        total: totalHistory,
-        page,
-        limit,
-        totalPages: Math.ceil(totalHistory / limit),
-        history,
-      };
+      const fileMap = fileIds.length
+        ? Object.fromEntries(
+            (
+              await this.prisma.checklistFile.findMany({
+                where: { id: { in: fileIds } },
+                select: { id: true, filePath: true },
+              })
+            ).map((file) => [file.id, file.filePath]),
+          )
+        : {};
+
+      // Add file paths to applicable logs
+      const enrichedLogs = logs.map((log) =>
+        log.type === "CHECKLIST" && log.fieldName === "attachmentFileId"
+          ? {
+              ...log,
+              oldFilePath: fileMap[log.oldValue] || null,
+              newFilePath: fileMap[log.newValue] || null,
+            }
+          : log,
+      );
+
+      const total = await this.prisma.issueHistory.count({ where: baseWhere });
 
       return {
-        message: "Issue history fetched successfully",
-        data: response,
+        message: "History logs fetched successfully",
+        data: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+          history: enrichedLogs,
+        },
       };
     } catch (error) {
-      this.logger.error("Failed to fetch issue history logs", error);
+      this.logger.error("Failed to fetch issue/checklist history logs", error);
       throw error;
     }
   }
 
   async assignProject(body: { projectId: string; userIds: string[] }) {
     const { projectId, userIds } = body;
+
     try {
-      // Verify project exists
+      // 1) Verify project exists and grab its timeline
       const project = await this.prisma.project.findUnique({
         where: { id: projectId },
+        select: { startDate: true, endDate: true },
       });
-      
       if (!project) {
-        throw new NotFoundException('Project not found');
+        throw new NotFoundException("Project not found");
       }
-      
-      // Verify all users exist
-      const users = await this.prisma.user.findMany({
-        where: {
-          id: { in: userIds }
-        },
-        select: {
-          id: true,
-          displayName: true,
-          email: true
+      const { startDate: startDt, endDate: endDt } = project;
+
+      // 2) Conflict check: make sure none of these users is already booked
+      if (startDt && endDt && userIds.length > 0) {
+        const conflicts = await this.prisma.availability.findMany({
+          where: {
+            userId: { in: userIds },
+            projectId: { not: projectId },
+            AND: [{ startDate: { lte: endDt } }, { endDate: { gte: startDt } }],
+          },
+          select: {
+            user: {
+              select: { displayName: true },
+            },
+          },
+        });
+
+        if (conflicts.length) {
+          const names = Array.from(
+            new Set(conflicts.map((c) => c.user.displayName)),
+          );
+          throw new BadRequestException(
+            `Cannot assign users [${names.join(
+              ", ",
+            )}] — they’re already booked in that timeframe.`,
+          );
         }
-      });
-      
-      if (users.length !== userIds.length) {
-        throw new BadRequestException('One or more users not found');
       }
-      
-      // Remove any existing assignments for this project
+
+      // 3) Fetch previous assignments so we can reconcile Availability afterward
+      const prev = await this.prisma.projectAssignment.findMany({
+        where: { projectId },
+        select: { userId: true },
+      });
+      const prevUserIds = prev.map((a) => a.userId);
+
+      // 4) Delete old assignments
       await this.prisma.projectAssignment.deleteMany({
-        where: { projectId }
+        where: { projectId },
       });
-      
-      // Create new assignments
-      const assignments = await this.prisma.projectAssignment.createMany({
-        data: userIds.map(userId => ({
+
+      // 5) Create new assignments
+      await this.prisma.projectAssignment.createMany({
+        data: userIds.map((uid) => ({
           projectId,
-          userId
+          userId: uid,
         })),
-        skipDuplicates: true
+        skipDuplicates: true,
       });
-      
-      this.logger.log(`Project ${projectId} assigned to ${assignments.count} users`);
-      
-      
-      return {
-        message: 'Project assigned successfully'
-      };
+
+      // 6) Reconcile Availability rows:
+
+      // 6a) Remove availabilities for users no longer on the project
+      const removed = prevUserIds.filter((uid) => !userIds.includes(uid));
+      if (removed.length) {
+        await this.prisma.availability.deleteMany({
+          where: {
+            projectId,
+            userId: { in: removed },
+          },
+        });
+      }
+
+      // 6b) Seed availabilities for newly added users
+      const added = userIds.filter((uid) => !prevUserIds.includes(uid));
+      if (added.length && startDt && endDt) {
+        await this.prisma.availability.createMany({
+          data: added.map((uid) => ({
+            projectId,
+            userId: uid,
+            startDate: startDt,
+            endDate: endDt,
+            startWeek: getISOWeek(startDt),
+            endWeek: getISOWeek(endDt),
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      this.logger.log(
+        `Project ${projectId} assigned to ${userIds.length} users`,
+      );
+      return { message: "Project assigned successfully" };
     } catch (error) {
       this.logger.error("Failed to assign project", error);
       throw error;
     }
   }
 
-
   async removeAssignedUser(body: { projectId: string; userId: string }) {
     const { projectId, userId } = body;
-    try {
-      // Verify project exists
-      const project = await this.prisma.project.findUnique({
-        where: { id: projectId },
-      });
-  
-      if (!project) {
-        throw new NotFoundException("Project not found");
-      }
-  
-      // Verify user exists in the project assignment
-      const assignment = await this.prisma.projectAssignment.findFirst({
-        where: {
-          projectId,
-          userId,
-        },
-      });
-  
-      if (!assignment) {
-        throw new BadRequestException("User is not assigned to this project");
-      }
-  
-      // Remove the user assignment
-      await this.prisma.projectAssignment.delete({
-        where: {
-          projectId_userId: { projectId, userId }, // Assuming composite unique constraint on projectId and userId
-        },
-      });
-  
-      this.logger.log(`User ${userId} removed from project ${projectId}`);
-  
-      return {
-        message: "User successfully unassigned from the project",
-      };
-    } catch (error) {
-      this.logger.error("Failed to remove user assignment", error);
-      throw error;
+
+    // 1) Verify project exists
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+    });
+    if (!project) {
+      throw new NotFoundException("Project not found");
     }
+
+    // 2) Verify the assignment exists
+    const assignment = await this.prisma.projectAssignment.findFirst({
+      where: { projectId, userId },
+    });
+    if (!assignment) {
+      throw new BadRequestException("User is not assigned to this project");
+    }
+
+    // 3) Delete assignment + availability in one transaction
+    await this.prisma.$transaction([
+      this.prisma.projectAssignment.delete({
+        where: {
+          projectId_userId: { projectId, userId },
+        },
+      }),
+      this.prisma.availability.deleteMany({
+        where: { projectId, userId },
+      }),
+    ]);
+
+    this.logger.log(
+      `User ${userId} removed from project ${projectId} (and availability cleaned up)`,
+    );
+
+    return {
+      message: "User successfully unassigned from the project",
+    };
   }
-  
 }

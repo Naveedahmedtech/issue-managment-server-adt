@@ -1,5 +1,5 @@
 export const ENV = {
-    FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:5173',
+    FRONTEND_URL: process.env.FRONTEND_URL || 'http://192.168.18.65:5173',
     SERVER_URL: process.env.SERVER_URL || 'http://localhost:3000',
     AZURE_CLIENT: process.env.AZURE_CLIENT,
     AZURE_SECRETE_ID: process.env.AZURE_SECRETE_ID,

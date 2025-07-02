@@ -550,20 +550,28 @@ export class UserService {
     try {
       const skip = (page - 1) * limit;
 
-      // Build the where clause conditionally based on roleName and excluding specific emails
+      // Build the where clause conditionally based on roleName and excluding specific emails and role SUPER_ADMIN
       const whereClause: any = {
         // NOT: [
         //   { email: "jonas@viewsoft.com" },
         //   { email: "malik.wahhab@aridiantechnologies.co" },
         //   { email: "super_admin@viewsoftweb.onmicrosoft.com" },
         // ],
+        role: {
+          NOT: {
+            name: ROLES.SUPER_ADMIN // Exclude users with the role SUPER_ADMIN
+          }
+        }
       };
 
       if (roleName) {
         whereClause.role = {
-          name: roleName,
+          ...whereClause.role, // Preserve existing NOT condition
+          name: roleName, // Filter by role if provided
         };
       }
+
+      console.log(whereClause)
 
       // Fetch users, optionally filtering by role name
       const users = await this.prisma.user.findMany({
@@ -709,48 +717,54 @@ export class UserService {
         if (
           userData.email === "johannes@assemble-it.no" ||
           userData.email === "malik.wahhab@aridiantechnologies.co" ||
-          userData.email === "super_admin@viewsoftweb.onmicrosoft.com"
+          userData.email === "super_admin@viewsoftweb.onmicrosoft.com" ||
+            userData.email === "technaveedahmed@outlook.com"
         ) {
           role = await this.prisma.role.findUnique({
             where: { name: ROLES.SUPER_ADMIN },
           });
-        } else {
-          role = await this.prisma.role.findUnique({
-            where: { name: ROLES.WORKER },
-          });
-        }
 
-        // Create the new user with the assigned role
-        user = await this.prisma.user.create({
-          data: {
-            azureId: userData.azureId,
-            email: userData.email,
-            displayName: userData.name,
-            role: {
-              connect: { id: role.id },
+          // Create the new user with the assigned role
+          user = await this.prisma.user.create({
+            data: {
+              azureId: userData.azureId,
+              email: userData.email,
+              displayName: userData.name,
+              role: {
+                connect: { id: role.id },
+              },
             },
-          },
-        });
+          });
 
-        // Assign all permissions to SUPER_ADMIN users
-        if (role.name === ROLES.SUPER_ADMIN) {
-          try {
-            const permissions = await this.prisma.permission.findMany();
-            console.log("Permissions: --> ", permissions);
-            await this.prisma.userPermission.createMany({
-              data: permissions.map((permission) => ({
-                userId: user.id,
-                permissionId: permission.id,
-              })),
-            });
-          } catch (error) {
-            console.log("Permission not found", error);
+          // Assign all permissions to SUPER_ADMIN users
+          if (role.name === ROLES.SUPER_ADMIN) {
+            try {
+              const permissions = await this.prisma.permission.findMany();
+              console.log("Permissions: --> ", permissions);
+              await this.prisma.userPermission.createMany({
+                data: permissions.map((permission) => ({
+                  userId: user.id,
+                  permissionId: permission.id,
+                })),
+              });
+            } catch (error) {
+              console.log("Permission not found", error);
+            }
           }
+
+          this.logger.log(
+              `New user created with role "${role.name}": ${user.email}`,
+          );
+        } else {
+          // Redirect to the frontend
+          return {
+            message: "REDIRECT_TO_APPLICATION",
+            data: {
+              redirectURI: `${process.env.FRONTEND_URL}/auth/sign-in`,
+            },
+          };
         }
 
-        this.logger.log(
-          `New user created with role "${role.name}": ${user.email}`,
-        );
       } else {
         this.logger.log(`Existing user authenticated: ${user.email}`);
       }

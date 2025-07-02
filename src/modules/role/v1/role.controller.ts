@@ -15,7 +15,7 @@ import {RolesAndPermissions} from "../../../utils/roleAndPermission.decorator";
 import {PERMISSIONS, ROLES} from "../../../constants/roles-permissions.constants";
 
 @Controller({ path: 'role', version: '1' })
-@UseGuards(AuthGuard)
+// @UseGuards(AuthGuard)
 export class RoleController {
     constructor(private readonly roleService: RoleService) {}
 
@@ -26,7 +26,7 @@ export class RoleController {
     }
 
     @Post()
-    @RolesAndPermissions([ROLES.SUPER_ADMIN], [PERMISSIONS.USER_MANAGEMENT.MANAGE_ROLES])
+    // @RolesAndPermissions([ROLES.SUPER_ADMIN], [PERMISSIONS.USER_MANAGEMENT.MANAGE_ROLES])
     async createRole(@Body() body: CreateRoleDto) {
         return await this.roleService.createRole(body);
     }

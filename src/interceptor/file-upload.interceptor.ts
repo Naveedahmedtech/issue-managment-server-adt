@@ -4,7 +4,7 @@ import { diskStorage } from "multer";
 import { extname, basename } from "path";
 import * as fs from "fs";
 
-export function FileUploadInterceptor(destinationPath: string, maxFiles = 10) {
+export function FileUploadInterceptor(destinationPath: string, maxFiles = 10, maxFileSizeMB = 100) {
   const logger = new Logger("FileUploadInterceptor");
   return applyDecorators(
     UseInterceptors(
@@ -14,30 +14,29 @@ export function FileUploadInterceptor(destinationPath: string, maxFiles = 10) {
             callback(null, destinationPath);
           },
           filename: async (req, file, callback) => {
-            console.log(file)
             const fileExtName = extname(file.originalname);
             const fileNameWithoutExt = basename(file.originalname, fileExtName);
-
             const finalFileName = `${fileNameWithoutExt}${fileExtName}`;
 
-            // Unlink (delete) the old file if it exists
             const existingFilePath = `${destinationPath}/${finalFileName}`;
             if (fs.existsSync(existingFilePath)) {
               try {
-                fs.unlinkSync(existingFilePath);
-                logger.log(`Deleted existing file: ${existingFilePath}`);
+                // Uncomment if you want to overwrite:
+                // fs.unlinkSync(existingFilePath);
+                // logger.log(`Deleted existing file: ${existingFilePath}`);
               } catch (error) {
-                logger.error(
-                  `Failed to delete existing file: ${existingFilePath}`,
-                  error,
-                );
+                logger.error(`Failed to delete existing file: ${existingFilePath}`, error);
               }
             }
 
             callback(null, finalFileName);
           },
         }),
+        limits: {
+          fileSize: maxFileSizeMB * 1024 * 1024, // e.g. 5 MB default
+        },
       }),
     ),
   );
 }
+

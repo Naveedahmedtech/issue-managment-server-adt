@@ -62,7 +62,7 @@ export class IssueService {
       }
   
       // Create issue without worrying about image
-      const newIssue = await this.prisma.issue.create({
+      let newIssue = await this.prisma.issue.create({
         data: {
           title: data.title,
           description: data.description,
@@ -73,10 +73,12 @@ export class IssueService {
           userId: data.userId,
         },
       });
+
+      let issueFile: any;
   
       // Save file record **only if image exists**
       if (relativePath) {
-        await this.prisma.issueFile.create({
+        issueFile = await this.prisma.issueFile.create({
           data: {
             issueId: newIssue.id,
             filePath: relativePath.replace(/\\/g, "/"),
@@ -84,6 +86,8 @@ export class IssueService {
         });
         this.logger.log("Issue file is saved!");
       }
+
+      newIssue['file'] = issueFile;
   
       this.logger.log(`Issue created successfully: ${newIssue.id}`);
       return { message: "Issue created successfully", data: newIssue };
