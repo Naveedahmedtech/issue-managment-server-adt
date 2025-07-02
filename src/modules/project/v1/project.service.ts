@@ -378,14 +378,14 @@ export class ProjectService {
         "Service English.pdf",
       );
       if (data.isOrder === "true") {
-                const existedOrderFile = await this.prisma.file.findFirst({
+        const existedOrderFile = await this.prisma.file.findFirst({
           where: {
             isOrder: true,
             filePath: defaultOrderFilePath,
             projectId,
           },
         });
-        if(!existedOrderFile) {
+        if (!existedOrderFile) {
           await this.prisma.file.create({
             data: {
               projectId: projectId,
@@ -393,10 +393,13 @@ export class ProjectService {
               isOrder: true,
             },
           });
-          this.logger.log(`Attached default order file to project ${projectId}`);
+          this.logger.log(
+            `Attached default order file to project ${projectId}`,
+          );
         } else {
-          this.logger.log(`default order file is alrady attached to project ${projectId}`);
-
+          this.logger.log(
+            `default order file is alrady attached to project ${projectId}`,
+          );
         }
       }
       if (data.isOrder === "false") {
@@ -407,14 +410,14 @@ export class ProjectService {
             projectId,
           },
         });
-                if(existedOrderFile) {
-        await this.prisma.file.delete({
-          where: {
-            id: existedOrderFile.id,
-          },
-        });
-        this.logger.log(`default order file deleted in project ${projectId}`);
-        } 
+        if (existedOrderFile) {
+          await this.prisma.file.delete({
+            where: {
+              id: existedOrderFile.id,
+            },
+          });
+          this.logger.log(`default order file deleted in project ${projectId}`);
+        }
       }
 
       this.logger.log(`Project updated successfully: ${updatedProject.id}`);
@@ -1034,7 +1037,9 @@ export class ProjectService {
   async getProjectStats() {
     try {
       // Fetch total project count
-      const totalProjects = await this.prisma.project.count();
+      const totalProjects = await this.prisma.project.count({
+        where: { archived: false },
+      });
 
       // Fetch total issue count
       const totalIssues = await this.prisma.issue.count();
@@ -1049,7 +1054,7 @@ export class ProjectService {
       // Fetch total to-do issues count
       const totalToDoIssues = await this.prisma.issue.count({
         where: {
-          status: "ON GOING",
+          status: "ACTIVE",
         },
       });
 
