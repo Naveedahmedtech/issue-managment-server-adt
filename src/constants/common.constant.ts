@@ -8,3 +8,4 @@ export const ENV = {
     AZURE_SECRET: process.env.AZURE_SECRET,
     JWT_SECRET: process.env.JWT_SECRET || 'jwt-secret',
 }
+

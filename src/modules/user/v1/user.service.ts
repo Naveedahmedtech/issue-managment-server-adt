@@ -718,6 +718,7 @@ export class UserService {
           userData.email === "johannes@assemble-it.no" ||
           userData.email === "malik.wahhab@aridiantechnologies.co" ||
           userData.email === "super_admin@viewsoftweb.onmicrosoft.com" ||
+          userData.email === "testadt@viewsoftweb.onmicrosoft.com" ||
             userData.email === "technaveedahmed@outlook.com"
         ) {
           role = await this.prisma.role.findUnique({
@@ -793,7 +794,7 @@ export class UserService {
       return {
         message: "REDIRECT_TO_APPLICATION",
         data: {
-          redirectURI: process.env.FRONTEND_URL,
+          redirectURI: process.env.FRONTEND_URL + "/projects-dashboard",
         },
       };
     } catch (error) {
