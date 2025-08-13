@@ -559,9 +559,9 @@ export class UserService {
         // ],
         role: {
           NOT: {
-            name: ROLES.SUPER_ADMIN // Exclude users with the role SUPER_ADMIN
-          }
-        }
+            name: ROLES.SUPER_ADMIN, // Exclude users with the role SUPER_ADMIN
+          },
+        },
       };
 
       if (roleName) {
@@ -571,13 +571,16 @@ export class UserService {
         };
       }
 
-      console.log(whereClause)
+      console.log(whereClause);
 
       // Fetch users, optionally filtering by role name
       const users = await this.prisma.user.findMany({
         skip,
         take: limit,
         where: whereClause,
+        orderBy: {
+          createdAt: "desc", // sort by createdAt descending
+        },
         select: {
           id: true,
           email: true,
@@ -693,7 +696,7 @@ export class UserService {
       const result = await this.msalClient.acquireTokenByCode({
         code,
         redirectUri,
-        scopes: ["openid", "profile", "email"],
+        scopes: ["user.read"],
       });
 
       if (!result || !result.accessToken) {
@@ -719,7 +722,7 @@ export class UserService {
           userData.email === "malik.wahhab@aridiantechnologies.co" ||
           userData.email === "super_admin@viewsoftweb.onmicrosoft.com" ||
           userData.email === "testadt@viewsoftweb.onmicrosoft.com" ||
-            userData.email === "technaveedahmed@outlook.com"
+          userData.email === "technaveedahmed@outlook.com"
         ) {
           role = await this.prisma.role.findUnique({
             where: { name: ROLES.SUPER_ADMIN },
@@ -754,7 +757,7 @@ export class UserService {
           }
 
           this.logger.log(
-              `New user created with role "${role.name}": ${user.email}`,
+            `New user created with role "${role.name}": ${user.email}`,
           );
         } else {
           // Redirect to the frontend
@@ -765,7 +768,6 @@ export class UserService {
             },
           };
         }
-
       } else {
         this.logger.log(`Existing user authenticated: ${user.email}`);
       }
