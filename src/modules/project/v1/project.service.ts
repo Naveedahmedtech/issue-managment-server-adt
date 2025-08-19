@@ -2425,18 +2425,6 @@ export class ProjectService {
     sortOrder: "asc" | "desc" = "desc",
   ) {
     try {
-      const toStartOfDayUTC = (d: string) => {
-  const dt = new Date(d);
-  dt.setUTCHours(0, 0, 0, 0);
-  return dt;
-};
-
-const toNextDayStartUTC = (d: string) => {
-  const dt = new Date(d);
-  dt.setUTCHours(0, 0, 0, 0);
-  dt.setUTCDate(dt.getUTCDate() + 1);
-  return dt; // exclusive upper bound
-};
       // Calculate offset for pagination
       const offset = (page - 1) * limit;
 
@@ -2456,23 +2444,20 @@ const toNextDayStartUTC = (d: string) => {
         where.status = status?.toUpperCase(); // Filter by exact status
       }
 
-if (startDate && endDate) {
-  const start = toStartOfDayUTC(startDate);
-  const endExclusive = toNextDayStartUTC(endDate);
+if (startDate) {
+  const start = new Date(startDate);
+  where.startDate = { gte: start };
+}
 
-  // Overlap logic: project.startDate <= filterEnd && project.endDate >= filterStart
-  where.AND = [
-    { startDate: { lt: endExclusive } },
-    { endDate:   { gte: start } },
-  ];
-} else if (startDate) {
-  const start = toStartOfDayUTC(startDate);
-  // Projects that end on/after the start filter (inclusive)
-  where.endDate = { gte: start };
-} else if (endDate) {
-  const endExclusive = toNextDayStartUTC(endDate);
-  // Projects that end on/before end filter (inclusive via exclusive next-day)
-  where.endDate = { lt: endExclusive };
+if (endDate) {
+  const end = new Date(endDate);
+
+  // If endDate is passed without time, bump it to end of day
+  if (endDate.length === 10) { // e.g. "2025-08-18"
+    end.setHours(23, 59, 59, 999);
+  }
+
+  where.endDate = { lte: end };
 }
 
 
