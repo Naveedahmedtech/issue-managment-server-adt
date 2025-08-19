@@ -1679,6 +1679,7 @@ export class ProjectService {
         "orders",
         "Service English.pdf",
       );
+
       if (data.isOrder === "true") {
         const existedOrderFile = await this.prisma.file.findFirst({
           where: {
@@ -1688,22 +1689,61 @@ export class ProjectService {
           },
         });
         if (!existedOrderFile) {
+          const defaultFileName = "Service English.pdf";
+
+          // Source (master template file)
+          const srcPath = join("uploads", "orders", defaultFileName);
+
+          // Generate a safe unique filename for disk storage
+          const ext = pathPosix.extname(defaultFileName); // .pdf
+          const base = pathPosix.basename(defaultFileName, ext); // Service English
+          const uniqueName = `${base}-${randomUUID()}${ext}`; // e.g. Service English-123e4567-e89b.pdf
+
+          // Destination path (projects folder)
+          const destPath = join("uploads", "projects", uniqueName);
+
+          // Copy file
+          copyFileSync(srcPath, destPath);
+
+          // Save DB record
           await this.prisma.file.create({
             data: {
               projectId: projectId,
-              filePath: defaultOrderFilePath,
+              filePath: pathPosix.join("uploads", "projects", uniqueName),
               isOrder: true,
             },
           });
+
           this.logger.log(
-            `Attached default order file to project ${projectId}`,
-          );
-        } else {
-          this.logger.log(
-            `default order file is alrady attached to project ${projectId}`,
+            `Copied default order file for project ${projectId} → ${destPath}`,
           );
         }
       }
+      // if (data.isOrder === "true") {
+      //   const existedOrderFile = await this.prisma.file.findFirst({
+      //     where: {
+      //       isOrder: true,
+      //       filePath: defaultOrderFilePath,
+      //       projectId,
+      //     },
+      //   });
+      //   if (!existedOrderFile) {
+      //     await this.prisma.file.create({
+      //       data: {
+      //         projectId: projectId,
+      //         filePath: defaultOrderFilePath,
+      //         isOrder: true,
+      //       },
+      //     });
+      //     this.logger.log(
+      //       `Attached default order file to project ${projectId}`,
+      //     );
+      //   } else {
+      //     this.logger.log(
+      //       `default order file is alrady attached to project ${projectId}`,
+      //     );
+      //   }
+      // }
       if (data.isOrder === "false") {
         const existedOrderFile = await this.prisma.file.findFirst({
           where: {

@@ -8,11 +8,9 @@ export async function setupApp(app: INestApplication) {
   // Enable CORS
   app.enableCors({
     origin: [
-      "http://localhost:5173",
-      "http://localhost:4200",
-      "http://localhost:51142",
-      "http://192.168.18.125:5173",
-      "http://192.168.18.65:4200",
+process.env.FRONTEND_URL,
+process.env.ANGULAR_URL,
+
     ],
     credentials: true,
   });
