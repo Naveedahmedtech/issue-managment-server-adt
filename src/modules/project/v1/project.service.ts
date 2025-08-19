@@ -13,7 +13,7 @@ import { posix as pathPosix } from "path";
 import * as PDFDocument from "pdfkit";
 // import PDFDocument from 'pdfkit';
 import * as path from "path";
-import { promises as fs } from "fs";
+import { copyFileSync, promises as fs } from "fs";
 import { getISOWeek } from "src/utils/date-utils";
 import {
   Prisma,
@@ -23,6 +23,7 @@ import {
   ProjectChecklist,
   ProjectChecklistItem,
 } from "@prisma/client";
+import { randomUUID } from "crypto";
 
 @Injectable()
 export class ProjectService {
@@ -837,30 +838,34 @@ export class ProjectService {
       doc.moveDown(0.6);
 
       const descHtml = project.description || "";
-if (descHtml.trim()) {
-  this.drawSectionHeading(doc, "Description");
+      if (descHtml.trim()) {
+        this.drawSectionHeading(doc, "Description");
 
-  const left = doc.page.margins.left ?? 50;
-  const rightX = (doc.page.width ?? 595) - (doc.page.margins.right ?? 50);
-  const width = rightX - left;
+        const left = doc.page.margins.left ?? 50;
+        const rightX = (doc.page.width ?? 595) - (doc.page.margins.right ?? 50);
+        const width = rightX - left;
 
-  // Record start Y, render rich HTML, then draw a subtle left rule for emphasis
-  const startY = (doc as any).y;
-  this.renderEditorHtml(doc, descHtml, left, width * 0.94, {
-    fontSize: 11,
-    lineGap: 2,
-    color: "#202124",
-  });
-  const endY = (doc as any).y;
+        // Record start Y, render rich HTML, then draw a subtle left rule for emphasis
+        const startY = (doc as any).y;
+        this.renderEditorHtml(doc, descHtml, left, width * 0.94, {
+          fontSize: 11,
+          lineGap: 2,
+          color: "#202124",
+        });
+        const endY = (doc as any).y;
 
-  // Left accent (no need to pre-measure height)
-  doc.save();
-  doc.moveTo(left - 6, startY).lineTo(left - 6, endY)
-     .lineWidth(3).strokeColor("#E0E3E7").stroke();
-  doc.restore();
+        // Left accent (no need to pre-measure height)
+        doc.save();
+        doc
+          .moveTo(left - 6, startY)
+          .lineTo(left - 6, endY)
+          .lineWidth(3)
+          .strokeColor("#E0E3E7")
+          .stroke();
+        doc.restore();
 
-  doc.moveDown(0.6);
-}
+        doc.moveDown(0.6);
+      }
 
       // ─────────────────────────────── PROJECT FILES ────────────────────────────
       if (project.files?.length) {
@@ -1452,20 +1457,33 @@ if (descHtml.trim()) {
       }
 
       if (body.isOrder === "true") {
-        const defaultOrderFilePath = pathPosix.join(
-          "uploads",
-          "orders",
-          "Service English.pdf",
-        );
+        const defaultFileName = "Service English.pdf";
+
+        // Source (master template file)
+        const srcPath = join("uploads", "orders", defaultFileName);
+
+        // Generate a safe unique filename for disk storage
+        const ext = pathPosix.extname(defaultFileName); // .pdf
+        const base = pathPosix.basename(defaultFileName, ext); // Service English
+        const uniqueName = `${base}-${randomUUID()}${ext}`; // e.g. Service English-123e4567-e89b.pdf
+
+        // Destination path (projects folder)
+        const destPath = join("uploads", "projects", uniqueName);
+
+        // Copy file
+        copyFileSync(srcPath, destPath);
+
+        // Save DB record
         await this.prisma.file.create({
           data: {
             projectId: newProject.id,
-            filePath: defaultOrderFilePath,
+            filePath: pathPosix.join("uploads", "projects", uniqueName),
             isOrder: true,
           },
         });
+
         this.logger.log(
-          `Attached default order file to project ${newProject.id}`,
+          `Copied default order file for project ${newProject.id} → ${destPath}`,
         );
       }
 
@@ -2529,11 +2547,11 @@ if (descHtml.trim()) {
     }
   }
 
-  async downloadFile(fileId: string, type: "project" | "issue") {
+  async downloadFile(fileId: string, type: "project" | "issue" | "order") {
     try {
       // Fetch file details based on the type
       const file =
-        type === "project"
+        type === "project" || type === "order"
           ? await this.prisma.file.findUnique({
               where: { id: fileId },
             })
@@ -2545,11 +2563,20 @@ if (descHtml.trim()) {
         throw new NotFoundException("File not found!");
       }
 
-      const filePath = join(
+      let filePath;
+      // if (file.filePath.split("/").pop() === "Service English.pdf") {
+      //   filePath = join(
+      //     "./uploads",
+      //     "orders",
+      //     pathPosix.basename(file.filePath),
+      //   );
+      // } else {
+      filePath = join(
         "./uploads",
-        type === "project" ? "projects" : "issues",
+        type === "project" || type === "order" ? "projects" : "issues",
         pathPosix.basename(file.filePath),
       );
+      // }
 
       // Send the file to the user
       return {
@@ -2942,5 +2969,43 @@ if (descHtml.trim()) {
     return {
       message: "User successfully unassigned from the project",
     };
+  }
+
+  async deleteFile(fileId: string, type: "project" | "issue" | "order") {
+    try {
+      // Fetch file record
+      const file =
+        type === "project" || type === "order"
+          ? await this.prisma.file.findUnique({ where: { id: fileId } })
+          : await this.prisma.issueFile.findUnique({ where: { id: fileId } });
+
+      if (!file) throw new NotFoundException("File not found!");
+
+      // Compute safe absolute path
+      const filePath = join(".", file.filePath); // stored relative like uploads/projects/xxx.pdf
+
+      // Try deleting the physical file
+      try {
+        await fs.unlink(filePath);
+        this.logger.log(`Deleted file from disk: ${filePath}`);
+      } catch (err: any) {
+        // If file missing, warn but continue to DB cleanup
+        this.logger.warn(
+          `File not found on disk, skipping unlink: ${filePath}`,
+        );
+      }
+
+      // Delete DB record
+      if (type === "issue") {
+        await this.prisma.issueFile.delete({ where: { id: fileId } });
+      } else {
+        await this.prisma.file.delete({ where: { id: fileId } });
+      }
+
+      return { message: "FILE_DELETED", fileId };
+    } catch (error) {
+      this.logger.error(`Error deleting file: ${error.message}`);
+      throw error;
+    }
   }
 }

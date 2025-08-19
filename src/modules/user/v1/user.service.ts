@@ -546,120 +546,102 @@ export class UserService {
   //   }
   // }
 
-  async getAllUsers(page: number = 1, limit: number = 20, roleName?: string) {
-    try {
-      const skip = (page - 1) * limit;
+async getAllUsers(page: number = 1, limit: number = 20, roleName?: string, q?: string) {
+  try {
+    const skip = (page - 1) * limit;
+    const query = q?.trim();
 
-      // Build the where clause conditionally based on roleName and excluding specific emails and role SUPER_ADMIN
-      const whereClause: any = {
-        // NOT: [
-        //   { email: "jonas@viewsoft.com" },
-        //   { email: "malik.wahhab@aridiantechnologies.co" },
-        //   { email: "super_admin@viewsoftweb.onmicrosoft.com" },
-        // ],
-        role: {
-          NOT: {
-            name: ROLES.SUPER_ADMIN, // Exclude users with the role SUPER_ADMIN
-          },
-        },
+    // Base where clause (exclude SUPER_ADMIN)
+    const whereClause: any = {
+      role: {
+        NOT: { name: ROLES.SUPER_ADMIN },
+      },
+    };
+
+    // Role filter (keeps NOT condition)
+    if (roleName) {
+      whereClause.role = {
+        ...whereClause.role,
+        name: roleName,
       };
-
-      if (roleName) {
-        whereClause.role = {
-          ...whereClause.role, // Preserve existing NOT condition
-          name: roleName, // Filter by role if provided
-        };
-      }
-
-      console.log(whereClause);
-
-      // Fetch users, optionally filtering by role name
-      const users = await this.prisma.user.findMany({
-        skip,
-        take: limit,
-        where: whereClause,
-        orderBy: {
-          createdAt: "desc", // sort by createdAt descending
-        },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          displayName: true,
-          createdAt: true,
-          updatedAt: true,
-          role: {
-            select: {
-              id: true,
-              name: true,
-              permissions: {
-                select: {
-                  permission: {
-                    select: {
-                      action: true,
-                      description: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-          userPermissions: {
-            select: {
-              permission: {
-                select: {
-                  action: true,
-                  description: true,
-                },
-              },
-            },
-          },
-        },
-      });
-
-      // Count total users, applying the same role name filter and exclusion rule
-      const totalUsers = await this.prisma.user.count({
-        where: whereClause,
-      });
-
-      // Format the users' data
-      const formattedUsers = users.map((user) => {
-        const rolePermissions =
-          user.role?.permissions.map((p) => p.permission.action) || [];
-        const userPermissions =
-          user.userPermissions.map((p) => p.permission.action) || [];
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          displayName: user.displayName,
-          role: user.role?.name,
-          permissions: Array.from(
-            new Set([...rolePermissions, ...userPermissions]),
-          ),
-          createdAt: user.createdAt,
-          updatedAt: user.updatedAt,
-        };
-      });
-
-      this.logger.log("Fetched users successfully");
-      return {
-        message: "Users fetched successfully",
-        data: {
-          pagination: {
-            total: totalUsers,
-            page,
-            limit,
-          },
-          users: formattedUsers,
-        },
-      };
-    } catch (error) {
-      this.logger.error("Failed to fetch users", error);
-      throw error;
     }
+
+    // 🔎 Search filter (case-insensitive)
+    // Matches email, name, displayName, and role name (useful if roleName isn't provided)
+    if (query && query.length > 0) {
+      whereClause.OR = [
+        { email:       { contains: query, mode: "insensitive" } },
+        { name:        { contains: query, mode: "insensitive" } },
+        { displayName: { contains: query, mode: "insensitive" } },
+        { role: { name:{ contains: query, mode: "insensitive" } } },
+      ];
+    }
+
+    // Fetch users
+    const users = await this.prisma.user.findMany({
+      skip,
+      take: limit,
+      where: whereClause,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        displayName: true,
+        createdAt: true,
+        updatedAt: true,
+        role: {
+          select: {
+            id: true,
+            name: true,
+            permissions: {
+              select: {
+                permission: { select: { action: true, description: true } },
+              },
+            },
+          },
+        },
+        userPermissions: {
+          select: {
+            permission: { select: { action: true, description: true } },
+          },
+        },
+      },
+    });
+
+    // Count (same filters)
+    const totalUsers = await this.prisma.user.count({ where: whereClause });
+
+    // Format
+    const formattedUsers = users.map((user) => {
+      const rolePermissions = user.role?.permissions.map((p) => p.permission.action) || [];
+      const userPermissions = user.userPermissions.map((p) => p.permission.action) || [];
+      return {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        displayName: user.displayName,
+        role: user.role?.name,
+        permissions: Array.from(new Set([...rolePermissions, ...userPermissions])),
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      };
+    });
+
+    this.logger.log("Fetched users successfully");
+    return {
+      message: "Users fetched successfully",
+      data: {
+        pagination: { total: totalUsers, page, limit },
+        users: formattedUsers,
+      },
+    };
+  } catch (error) {
+    this.logger.error("Failed to fetch users", error);
+    throw error;
   }
+}
+
 
   async getUserById(id: string) {
     this.logger.log(`Fetching user with ID: ${id}`);

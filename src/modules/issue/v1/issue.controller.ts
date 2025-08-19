@@ -14,7 +14,7 @@ import { Request } from "express";
 import { AuthGuard } from "src/guards/auth.guard";
 import { FileUploadInterceptor } from "src/interceptor/file-upload.interceptor";
 import { RolesAndPermissions } from "src/utils/roleAndPermission.decorator";
-import { PERMISSIONS, ROLES } from "src/constants/roles-permissions.constants";
+import {  ROLES } from "src/constants/roles-permissions.constants";
 
 @Controller({ path: "issue", version: "1" })
 export class IssueController {
@@ -42,7 +42,6 @@ export class IssueController {
   @FileUploadInterceptor("./uploads/issues", 10)
   @RolesAndPermissions(
     [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
-    [PERMISSIONS.ISSUE.EDIT],
   )
   async updateIssue(
     @Param("id") id: string,
@@ -56,8 +55,7 @@ export class IssueController {
   @UseGuards(AuthGuard)
   @Post(":issueId/assign-to-user")
   @RolesAndPermissions(
-    [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
-    [PERMISSIONS.ISSUE.EDIT],
+    [ROLES.SUPER_ADMIN, ROLES.ADMIN],
   )
   async assignIssues(@Param("issueId") issueId: string, @Body() data: any) {
     const { userIds } = data;
