@@ -2425,6 +2425,18 @@ export class ProjectService {
     sortOrder: "asc" | "desc" = "desc",
   ) {
     try {
+      const toStartOfDayUTC = (d: string) => {
+  const dt = new Date(d);
+  dt.setUTCHours(0, 0, 0, 0);
+  return dt;
+};
+
+const toNextDayStartUTC = (d: string) => {
+  const dt = new Date(d);
+  dt.setUTCHours(0, 0, 0, 0);
+  dt.setUTCDate(dt.getUTCDate() + 1);
+  return dt; // exclusive upper bound
+};
       // Calculate offset for pagination
       const offset = (page - 1) * limit;
 
@@ -2444,17 +2456,25 @@ export class ProjectService {
         where.status = status?.toUpperCase(); // Filter by exact status
       }
 
-      if (startDate) {
-        where.startDate = {
-          gte: new Date(startDate), // Start date should be greater than or equal to the provided date
-        };
-      }
+if (startDate && endDate) {
+  const start = toStartOfDayUTC(startDate);
+  const endExclusive = toNextDayStartUTC(endDate);
 
-      if (endDate) {
-        where.endDate = {
-          lte: new Date(endDate), // End date should be less than or equal to the provided date
-        };
-      }
+  // Overlap logic: project.startDate <= filterEnd && project.endDate >= filterStart
+  where.AND = [
+    { startDate: { lt: endExclusive } },
+    { endDate:   { gte: start } },
+  ];
+} else if (startDate) {
+  const start = toStartOfDayUTC(startDate);
+  // Projects that end on/after the start filter (inclusive)
+  where.endDate = { gte: start };
+} else if (endDate) {
+  const endExclusive = toNextDayStartUTC(endDate);
+  // Projects that end on/before end filter (inclusive via exclusive next-day)
+  where.endDate = { lt: endExclusive };
+}
+
 
       // Fetch recent projects with applied filters and sorting
       const recentProjects = await this.prisma.project.findMany({
