@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { User } from "@prisma/client";
 import { Request } from "express";
 import { join } from "path";
@@ -35,7 +35,7 @@ export class IssueService {
     image?: string;
   }) {
     let relativePath: string | null = null;
-  
+
     try {
       if (data.image) {
         // Validate Base64 format
@@ -43,24 +43,29 @@ export class IssueService {
         if (!match) {
           throw new Error("Invalid Base64 image string");
         }
-  
+
         const fileType = match[1].split("/")[1]; // Extract file extension (png, jpg, etc.)
-        const base64Data = data.image.replace(/^data:image\/[a-zA-Z]+;base64,/, "");
-  
+        const base64Data = data.image.replace(
+          /^data:image\/[a-zA-Z]+;base64,/,
+          "",
+        );
+
         // Generate a unique filename
         const filename = `issue-${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileType}`;
-  
+
         // Define relative and absolute paths
         relativePath = path.join("uploads/issues", filename);
         const absolutePath = path.join(__dirname, "../../../../", relativePath);
-  
+
         // Ensure directory exists
-        await fs.promises.mkdir(path.dirname(absolutePath), { recursive: true });
-  
+        await fs.promises.mkdir(path.dirname(absolutePath), {
+          recursive: true,
+        });
+
         // Write the file asynchronously
         await fs.promises.writeFile(absolutePath, base64Data, "base64");
       }
-  
+
       // Create issue without worrying about image
       let newIssue = await this.prisma.issue.create({
         data: {
@@ -75,7 +80,7 @@ export class IssueService {
       });
 
       let issueFile: any;
-  
+
       // Save file record **only if image exists**
       if (relativePath) {
         issueFile = await this.prisma.issueFile.create({
@@ -87,8 +92,8 @@ export class IssueService {
         this.logger.log("Issue file is saved!");
       }
 
-      newIssue['file'] = issueFile;
-  
+      newIssue["file"] = issueFile;
+
       this.logger.log(`Issue created successfully: ${newIssue.id}`);
       return { message: "Issue created successfully", data: newIssue };
     } catch (error) {
@@ -96,8 +101,6 @@ export class IssueService {
       throw error;
     }
   }
-  
-  
 
   async updateIssue(
     issueId: string,
@@ -198,10 +201,19 @@ export class IssueService {
     }
   }
 
-  async deleteIssue(issueId: string) {
+  async deleteIssue(
+    issueId: string,
+    req: Request & { userDetails?: ExtendedUser },
+    bodyUserId,
+  ) {
+    const userId = req?.userDetails?.id ?? bodyUserId;
+    if (!userId) {
+      throw new BadRequestException("User ID is required");
+    }
+
     try {
       const existingIssue = await this.prisma.issue.findUnique({
-        where: { id: issueId },
+        where: { id: issueId, userId },
         include: {
           issueFiles: true,
         },

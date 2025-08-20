@@ -14,7 +14,7 @@ import { Request } from "express";
 import { AuthGuard } from "src/guards/auth.guard";
 import { FileUploadInterceptor } from "src/interceptor/file-upload.interceptor";
 import { RolesAndPermissions } from "src/utils/roleAndPermission.decorator";
-import {  ROLES } from "src/constants/roles-permissions.constants";
+import {  PERMISSIONS, ROLES } from "src/constants/roles-permissions.constants";
 
 @Controller({ path: "issue", version: "1" })
 export class IssueController {
@@ -42,6 +42,7 @@ export class IssueController {
   @FileUploadInterceptor("./uploads/issues", 10)
   @RolesAndPermissions(
     [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
+    [PERMISSIONS.ISSUE.CREATE]
   )
   async updateIssue(
     @Param("id") id: string,
@@ -75,7 +76,10 @@ export class IssueController {
   // @UseGuards(AuthGuard)
   @Delete(":issueId")
   // @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
-  async deleteIssue(@Param("issueId") issueId: string) {
-    return await this.issueService.deleteIssue(issueId);
+  async deleteIssue(@Param("issueId") issueId: string,
+  @Req() req: Request,
+  @Body() data: any = { userId: null }    
+) {
+    return await this.issueService.deleteIssue(issueId, req, data.userId);
   }
 }
