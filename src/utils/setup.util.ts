@@ -10,6 +10,8 @@ export async function setupApp(app: INestApplication) {
     origin: [
 process.env.FRONTEND_URL,
 process.env.ANGULAR_URL,
+"http://192.168.18.125:5173",
+"http://192.168.18.125:4200"
 
     ],
     credentials: true,
