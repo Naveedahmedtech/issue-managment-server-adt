@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import { User } from "@prisma/client";
 import { Request } from "express";
 import { join } from "path";
@@ -220,7 +220,7 @@ export class IssueService {
       });
 
       if (!existingIssue) {
-        throw new NotFoundException(`Issue ${issueId} does not exist`);
+        throw new UnauthorizedException(`You are not authorized to delete this issue.`);
       }
 
       // Delete associated files from the file system
