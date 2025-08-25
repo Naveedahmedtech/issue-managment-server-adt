@@ -1351,17 +1351,17 @@ export class ProjectService {
             },
           });
 
-          if (conflicts.length) {
-            // extract unique usernames
-            const conflictNames = Array.from(
-              new Set(conflicts.map((c) => c.user.displayName)),
-            );
-            throw new BadRequestException(
-              `Cannot assign users [${conflictNames.join(
-                ", ",
-              )}] — they already have availability in that timeframe.`,
-            );
-          }
+          // if (conflicts.length) {
+          //   // extract unique usernames
+          //   const conflictNames = Array.from(
+          //     new Set(conflicts.map((c) => c.user.displayName)),
+          //   );
+          //   throw new BadRequestException(
+          //     `Cannot assign users [${conflictNames.join(
+          //       ", ",
+          //     )}] — they already have availability in that timeframe.`,
+          //   );
+          // }
 
           // If no conflicts, keep them for your createMany below
           candidates = parsedUserIds;
@@ -1551,16 +1551,16 @@ export class ProjectService {
             },
           });
 
-          if (conflicts.length) {
-            const names = Array.from(
-              new Set(conflicts.map((c) => c.user.displayName)),
-            );
-            throw new BadRequestException(
-              `Cannot assign users [${names.join(
-                ", ",
-              )}] — they’re already booked in that timeframe.`,
-            );
-          }
+          // if (conflicts.length) {
+          //   const names = Array.from(
+          //     new Set(conflicts.map((c) => c.user.displayName)),
+          //   );
+          //   throw new BadRequestException(
+          //     `Cannot assign users [${names.join(
+          //       ", ",
+          //     )}] — they’re already booked in that timeframe.`,
+          //   );
+          // }
         }
       }
 
@@ -2904,16 +2904,16 @@ if (endDate) {
           },
         });
 
-        if (conflicts.length) {
-          const names = Array.from(
-            new Set(conflicts.map((c) => c.user.displayName)),
-          );
-          throw new BadRequestException(
-            `Cannot assign users [${names.join(
-              ", ",
-            )}] — they’re already booked in that timeframe.`,
-          );
-        }
+        // if (conflicts.length) {
+        //   const names = Array.from(
+        //     new Set(conflicts.map((c) => c.user.displayName)),
+        //   );
+        //   throw new BadRequestException(
+        //     `Cannot assign users [${names.join(
+        //       ", ",
+        //     )}] — they’re already booked in that timeframe.`,
+        //   );
+        // }
       }
 
       // 3) Fetch previous assignments so we can reconcile Availability afterward
