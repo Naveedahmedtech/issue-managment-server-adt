@@ -11,7 +11,8 @@ export async function setupApp(app: INestApplication) {
 process.env.FRONTEND_URL,
 process.env.ANGULAR_URL,
 "http://192.168.18.64:5173",
-"http://192.168.18.64:4200"
+"http://192.168.18.64:4200",
+"https://assemble-angluar.viewsoft.io"
 
     ],
     credentials: true,

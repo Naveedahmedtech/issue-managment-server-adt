@@ -1,12 +1,11 @@
-import { applyDecorators, UseInterceptors } from "@nestjs/common";
+import { applyDecorators, UseInterceptors, Logger } from "@nestjs/common";
 import { FilesInterceptor } from "@nestjs/platform-express";
 import { diskStorage } from "multer";
 import { extname, basename } from "path";
-// import * as fs from "fs";
+import * as fs from "fs";
 
-
-export function FileUploadInterceptor(destinationPath: string, maxFiles = 10, maxFileSizeMB = 100) {
-  // const logger = new Logger("FileUploadInterceptor");
+export function FileUploadInterceptor(destinationPath: string, maxFiles = 10) {
+  const logger = new Logger("FileUploadInterceptor");
   return applyDecorators(
     UseInterceptors(
       FilesInterceptor("files", maxFiles, {
@@ -15,21 +14,30 @@ export function FileUploadInterceptor(destinationPath: string, maxFiles = 10, ma
             callback(null, destinationPath);
           },
           filename: async (req, file, callback) => {
-  const fileExtName = extname(file.originalname);
-  const fileNameWithoutExt = basename(file.originalname, fileExtName);
+            console.log(file)
+            const fileExtName = extname(file.originalname);
+            const fileNameWithoutExt = basename(file.originalname, fileExtName);
 
-  // generate a short unique code (1000–99999)
-  const uniqueSuffix = Math.floor(1000 + Math.random() * 90000);
-  const finalFileName = `${fileNameWithoutExt}-${uniqueSuffix}${fileExtName}`;
+            const finalFileName = `${fileNameWithoutExt}${fileExtName}`;
 
-  callback(null, finalFileName);
+            // Unlink (delete) the old file if it exists
+            const existingFilePath = `${destinationPath}/${finalFileName}`;
+            if (fs.existsSync(existingFilePath)) {
+              try {
+                // fs.unlinkSync(existingFilePath);
+                // logger.log(`Deleted existing file: ${existingFilePath}`);
+              } catch (error) {
+                logger.error(
+                  `Failed to delete existing file: ${existingFilePath}`,
+                  error,
+                );
+              }
+            }
+
+            callback(null, finalFileName);
           },
         }),
-        limits: {
-          fileSize: maxFileSizeMB * 1024 * 1024, // e.g. 5 MB default
-        },
       }),
     ),
   );
 }
-
