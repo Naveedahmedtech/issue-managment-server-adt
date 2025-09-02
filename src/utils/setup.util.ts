@@ -12,8 +12,6 @@ process.env.FRONTEND_URL,
 process.env.ANGULAR_URL,
 "http://192.168.18.64:5173",
 "http://192.168.18.64:4200",
-"https://assemble-angluar.viewsoft.io"
-
     ],
     credentials: true,
   });

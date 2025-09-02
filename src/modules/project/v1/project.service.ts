@@ -621,6 +621,27 @@ export class ProjectService {
     doc.text("");
   }
 
+  /** Pretty string for a file’s signature fields */
+private formatSignature(
+  file: { signerName?: string | null; signerEmail?: string | null; signedAt?: Date | string | null },
+  dtFmt: Intl.DateTimeFormat
+): string {
+  const name = (file.signerName ?? "").trim();
+  const email = (file.signerEmail ?? "").trim();
+  const when = file.signedAt ? dtFmt.format(new Date(file.signedAt)) : null;
+
+  if (when) {
+    const who = [name, email && `<${email}>`].filter(Boolean).join(" ");
+    return `Signed by ${who || "Unknown"} on ${when}`;
+  }
+  if (name || email) {
+    const who = [name, email && `<${email}>`].filter(Boolean).join(" ");
+    return `Signature pending — ${who}`;
+  }
+  return "No signature";
+}
+
+
   /**
    * Generates a richly formatted PDF report for a project.
    * - Strips HTML in description/comments
@@ -728,11 +749,6 @@ export class ProjectService {
         doc.pipe(res);
       }
 
-      // Header + footer (re-entrancy-safe version you added previously)
-      // this.bindHeaderFooter(
-      //   doc,
-      //   this.stripHtml(project.title) || `Project ${project.id}`,
-      // );
 
       // Convenient geometry
       const left = doc.page.margins.left ?? 50;
@@ -868,73 +884,204 @@ export class ProjectService {
       }
 
       // ─────────────────────────────── PROJECT FILES ────────────────────────────
-      if (project.files?.length) {
-        this.drawSectionHeading(doc, "Project Files");
+      // if (project.files?.length) {
+      //   this.drawSectionHeading(doc, "Project Files");
 
-        const col1 = 0.45 * width; // name
-        const col2 = 0.3 * width; // link
-        const col3 = 0.25 * width; // created at
+      //   const col1 = 0.45 * width; // name
+      //   const col2 = 0.3 * width; // link
+      //   const col3 = 0.25 * width; // created at
 
-        this.ensureSpace(doc, 28);
-        let rowY = doc.y;
+      //   this.ensureSpace(doc, 28);
+      //   let rowY = doc.y;
 
-        // header row
-        doc.save().rect(left, rowY, width, 26).fill("#F1F3F4").restore();
-        this.tableHeaderCell(doc, "File Name", left + 10, rowY, col1 - 10);
-        this.tableHeaderCell(doc, "Link", left + col1 + 10, rowY, col2 - 20);
-        this.tableHeaderCell(
-          doc,
-          "Created At",
-          left + col1 + col2 + 10,
-          rowY,
-          col3 - 10,
-          "right",
-        );
-        rowY += 26;
+      //   // header row
+      //   doc.save().rect(left, rowY, width, 26).fill("#F1F3F4").restore();
+      //   this.tableHeaderCell(doc, "File Name", left + 10, rowY, col1 - 10);
+      //   this.tableHeaderCell(doc, "Link", left + col1 + 10, rowY, col2 - 20);
+      //   this.tableHeaderCell(
+      //     doc,
+      //     "Created At",
+      //     left + col1 + col2 + 10,
+      //     rowY,
+      //     col3 - 10,
+      //     "right",
+      //   );
+      //   rowY += 26;
 
-        project.files.forEach((f: ProjectFile, idx: number) => {
-          // ensure space for the next row; if page added, reset rowY to doc.y
-          this.ensureSpace(doc, 24);
-          if (doc.y !== rowY) rowY = doc.y;
+      //   project.files.forEach((f: ProjectFile, idx: number) => {
+      //     // ensure space for the next row; if page added, reset rowY to doc.y
+      //     this.ensureSpace(doc, 24);
+      //     if (doc.y !== rowY) rowY = doc.y;
 
-          if (idx % 2 === 0) {
-            doc.save().rect(left, rowY, width, 24).fill("#FAFBFC").restore();
-          }
-          const fileName = path.basename(f.filePath || "");
-          const url = this.buildPublicUrl(
-            process.env.SERVER_URL,
-            f.filePath || "",
-          );
+      //     if (idx % 2 === 0) {
+      //       doc.save().rect(left, rowY, width, 24).fill("#FAFBFC").restore();
+      //     }
+      //     const fileName = path.basename(f.filePath || "");
+      //     const url = this.buildPublicUrl(
+      //       process.env.SERVER_URL,
+      //       f.filePath || "",
+      //     );
 
-          this.tableBodyCell(doc, fileName || "—", left + 10, rowY, col1 - 10);
+      //     this.tableBodyCell(doc, fileName || "—", left + 10, rowY, col1 - 10);
 
-          doc.save();
-          doc
-            .fillColor("#1A73E8")
-            .font("Helvetica")
-            .fontSize(10)
-            .text("[Open]", left + col1 + 10, rowY + 6, {
-              link: url,
-              underline: true,
-              width: col2 - 20,
-            });
-          doc.restore();
+      //     doc.save();
+      //     doc
+      //       .fillColor("#1A73E8")
+      //       .font("Helvetica")
+      //       .fontSize(10)
+      //       .text("[Open]", left + col1 + 10, rowY + 6, {
+      //         link: url,
+      //         underline: true,
+      //         width: col2 - 20,
+      //       });
+      //     doc.restore();
 
-          this.tableBodyCell(
-            doc,
-            dtFmt.format(new Date(f.createdAt)),
-            left + col1 + col2 + 10,
-            rowY,
-            col3 - 10,
-            "right",
-          );
+      //     this.tableBodyCell(
+      //       doc,
+      //       dtFmt.format(new Date(f.createdAt)),
+      //       left + col1 + col2 + 10,
+      //       rowY,
+      //       col3 - 10,
+      //       "right",
+      //     );
 
-          rowY += 24;
-          doc.y = rowY;
+      //     rowY += 24;
+      //     doc.y = rowY;
+      //   });
+
+      //   doc.moveDown(0.8);
+      // }
+
+      // ─────────────────────────────── PROJECT FILES ────────────────────────────
+if (project.files?.length) {
+  this.drawSectionHeading(doc, "Project Files");
+
+  const col1 = 0.45 * width; // name
+  const col2 = 0.30 * width; // link
+  const col3 = 0.25 * width; // created at
+
+  // Local helper to pretty-print signature info
+  const formatSignatureLine = (file: {
+    signerName?: string | null;
+    signerEmail?: string | null;
+    signedAt?: Date | string | null;
+  }) => {
+    const name = (file.signerName ?? "").trim();
+    const email = (file.signerEmail ?? "").trim();
+    const when = file.signedAt ? dtFmt.format(new Date(file.signedAt)) : null;
+
+    if (when) {
+      const who = [name, email && `<${email}>`].filter(Boolean).join(" ");
+      return `Signed by ${who || "Unknown"} on ${when}`;
+    }
+    if (name || email) {
+      const who = [name, email && `<${email}>`].filter(Boolean).join(" ");
+      return `Signature pending — ${who}`;
+    }
+    return "No signature";
+  };
+
+  this.ensureSpace(doc, 28);
+  let rowY = doc.y;
+
+  // header row
+  doc.save().rect(left, rowY, width, 26).fill("#F1F3F4").restore();
+  this.tableHeaderCell(doc, "File Name", left + 10, rowY, col1 - 10);
+  this.tableHeaderCell(doc, "Link", left + col1 + 10, rowY, col2 - 20);
+  this.tableHeaderCell(
+    doc,
+    "Created At",
+    left + col1 + col2 + 10,
+    rowY,
+    col3 - 10,
+    "right",
+  );
+  rowY += 26;
+
+  project.files.forEach((f: ProjectFile, idx: number) => {
+    // base row
+    this.ensureSpace(doc, 24);
+    if (doc.y !== rowY) rowY = doc.y;
+
+    if (idx % 2 === 0) {
+      doc.save().rect(left, rowY, width, 24).fill("#FAFBFC").restore();
+    }
+
+    const fileName = path.basename(f.filePath || "");
+    const url = this.buildPublicUrl(process.env.SERVER_URL, f.filePath || "");
+
+    this.tableBodyCell(doc, fileName || "—", left + 10, rowY, col1 - 10);
+
+    doc.save();
+    doc
+      .fillColor("#1A73E8")
+      .font("Helvetica")
+      .fontSize(10)
+      .text("[Open]", left + col1 + 10, rowY + 6, {
+        link: url,
+        underline: true,
+        width: col2 - 20,
+      });
+    doc.restore();
+
+    this.tableBodyCell(
+      doc,
+      dtFmt.format(new Date(f.createdAt)),
+      left + col1 + col2 + 10,
+      rowY,
+      col3 - 10,
+      "right",
+    );
+
+    rowY += 24;
+    doc.y = rowY;
+
+    // signature sub-row (ONLY for isOrder files)
+    if ((f as any).isOrder) {
+      const signed = !!(f as any).signedAt;
+      const sigText = formatSignatureLine(f as any);
+
+      // ensure space for signature line
+      this.ensureSpace(doc, 22);
+      if (doc.y !== rowY) rowY = doc.y;
+
+      // subtle background for the sub-row
+      doc.save().rect(left, rowY, width, 22).fill("#FFFFFF").restore();
+
+      // signature text (spans the full table width, with a chip on the right)
+      doc
+        .font("Helvetica")
+        .fontSize(10)
+        .fillColor("#202124")
+        .text(`Signature: ${sigText}`, left + 10, rowY + 5, {
+          width: width - 120, // leave room for the chip
         });
 
-        doc.moveDown(0.8);
-      }
+      // status chip (SIGNED / NOT SIGNED)
+      doc.font("Helvetica-Bold").fontSize(9);
+      const chip = signed ? "SIGNED" : "NOT SIGNED";
+      const chipW = doc.widthOfString(chip) + 16;
+      const chipH = doc.currentLineHeight() + 6;
+      const chipX = left + width - chipW - 10;
+      const chipY = rowY + 4;
+
+      doc.save();
+      doc
+        .roundedRect(chipX, chipY, chipW, chipH, 6)
+        .fill(signed ? "#E6F4EA" : "#FCE8E6");
+      doc
+        .fillColor(signed ? "#137333" : "#C5221F")
+        .text(chip, chipX + 8, chipY + 3);
+      doc.restore();
+
+      rowY += 22;
+      doc.y = rowY;
+    }
+  });
+
+  doc.moveDown(0.8);
+}
+
 
       // ────────────────────────────────── ISSUES ────────────────────────────────
       if (issues.length) {
@@ -1684,7 +1831,9 @@ export class ProjectService {
         const existedOrderFile = await this.prisma.file.findFirst({
           where: {
             isOrder: true,
-            filePath: defaultOrderFilePath,
+            filePath: {
+              startsWith: "uploads/projects/Service English" 
+            },
             projectId,
           },
         });
@@ -1748,7 +1897,9 @@ export class ProjectService {
         const existedOrderFile = await this.prisma.file.findFirst({
           where: {
             isOrder: true,
-            filePath: defaultOrderFilePath,
+            filePath: {
+              startsWith: "uploads/projects/Service English" 
+            },
             projectId,
           },
         });

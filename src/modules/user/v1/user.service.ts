@@ -701,6 +701,7 @@ async getAllUsers(page: number = 1, limit: number = 20, roleName?: string, q?: s
         // Assign role based on predefined admin emails
         if (
           userData.email === "johannes@assemble-it.no" ||
+          userData.email === "jonas@rasterex.com" ||
           userData.email === "malik.wahhab@aridiantechnologies.co" ||
           userData.email === "super_admin@viewsoftweb.onmicrosoft.com" ||
           userData.email === "testadt@viewsoftweb.onmicrosoft.com" ||
