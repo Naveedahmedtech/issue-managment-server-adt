@@ -199,4 +199,44 @@ export class UniversalService {
       throw error;
     }
   }
+
+
+
+
+
+
+
+  async updatedAnnotationDownloadUrl({fileId, url}: any) {
+try {
+      const fileFound = await this.prisma.file.findUnique({
+        where: { id: fileId },
+      });
+
+      if (!fileFound) {
+        throw new NotFoundException("File not found!");
+      }
+
+      const file = await this.prisma.file.update({
+        data: {
+          annotationDownloadUrl: url
+        },
+        where: {
+          id: fileId,
+        },
+      });
+
+      return {
+        message: "File URL SAVED!.",
+        file,
+      };
+    } catch (error) {
+      this.logger.error("Error while updating signature status!", error);
+      throw error;
+    }
+  }
+
+
+
+
+
 }

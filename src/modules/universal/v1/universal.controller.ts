@@ -33,4 +33,12 @@ export class UniversalController {
     const params = { fileId: fileId, ...body  };
     return await this.universalService.updateSignedStatus(params);
   }
+  @Patch(":fileId/save-url")
+  async updatedAnnotationDownloadUrl(
+      @Param("fileId") fileId: string,
+       @Body() body: any, 
+  ) {
+    const params = { fileId: fileId, ...body  };
+    return await this.universalService.updatedAnnotationDownloadUrl(params);
+  }
 }

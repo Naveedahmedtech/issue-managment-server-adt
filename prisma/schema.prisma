@@ -126,18 +126,19 @@ model Availability {
 }
 
 model File {
-  id          String      @id @default(uuid()) @db.Uuid
-  projectId   String      @db.Uuid
-  filePath    String
-  isOrder     Boolean     @default(false)
-  isSigned    Boolean     @default(false)
-  signerName  String?
-  signerEmail String?
-  signedAt    DateTime?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  IssueFile   IssueFile[]
+  id                    String      @id @default(uuid()) @db.Uuid
+  projectId             String      @db.Uuid
+  filePath              String
+  isOrder               Boolean     @default(false)
+  isSigned              Boolean     @default(false)
+  signerName            String?
+  signerEmail           String?
+  signedAt              DateTime?
+  annotationDownloadUrl String?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  project               Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  IssueFile             IssueFile[]
 }
 
 /// ────────────────────────────────────────────────────────────
