@@ -1008,7 +1008,7 @@ if (project.files?.length) {
     }
 
     const fileName = path.basename(f.filePath || "");
-    const url = this.buildPublicUrl(process.env.SERVER_URL, f.filePath || "");
+    const url = f.annotationDownloadUrl ? f.annotationDownloadUrl : this.buildPublicUrl(process.env.SERVER_URL, f.filePath || "");
 
     this.tableBodyCell(doc, fileName || "—", left + 10, rowY, col1 - 10);
 
