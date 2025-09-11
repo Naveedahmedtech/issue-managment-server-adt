@@ -24,7 +24,9 @@ export class IssueService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async createIssue(data: {
+
+  async createIssue(
+  data: {
     title: string;
     description: string;
     status: string;
@@ -33,74 +35,169 @@ export class IssueService {
     projectId: string;
     userId: string;
     image?: string;
-  }) {
-    let relativePath: string | null = null;
+  },
+  dryRun: boolean = false, // new optional argument, defaults to false
+) {
+  let relativePath: string | null = null;
 
-    try {
-      if (data.image) {
-        // Validate Base64 format
-        const match = data.image.match(/^data:(image\/[a-zA-Z]+);base64,/);
-        if (!match) {
-          throw new Error("Invalid Base64 image string");
-        }
-
-        const fileType = match[1].split("/")[1]; // Extract file extension (png, jpg, etc.)
-        const base64Data = data.image.replace(
-          /^data:image\/[a-zA-Z]+;base64,/,
-          "",
-        );
-
-        // Generate a unique filename
-        const filename = `issue-${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileType}`;
-
-        // Define relative and absolute paths
-        relativePath = path.join("uploads/issues", filename);
-        const absolutePath = path.join(__dirname, "../../../../", relativePath);
-
-        // Ensure directory exists
-        await fs.promises.mkdir(path.dirname(absolutePath), {
-          recursive: true,
-        });
-
-        // Write the file asynchronously
-        await fs.promises.writeFile(absolutePath, base64Data, "base64");
+  try {
+    if (data.image) {
+      // Validate Base64 format
+      const match = data.image.match(/^data:(image\/[a-zA-Z]+);base64,/);
+      if (!match) {
+        throw new Error("Invalid Base64 image string");
       }
 
-      // Create issue without worrying about image
-      let newIssue = await this.prisma.issue.create({
-        data: {
-          title: data.title,
-          description: data.description,
-          status: data.status ? data.status.toUpperCase() : "ACTIVE",
-          startDate: data.startDate ? new Date(data.startDate) : null,
-          endDate: data.endDate ? new Date(data.endDate) : null,
-          projectId: data.projectId,
-          userId: data.userId,
-        },
+      const fileType = match[1].split("/")[1]; // Extract file extension (png, jpg, etc.)
+      const base64Data = data.image.replace(
+        /^data:image\/[a-zA-Z]+;base64,/,
+        "",
+      );
+
+      // Generate a unique filename
+      const filename = `issue-${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileType}`;
+
+      // Define relative and absolute paths
+      relativePath = path.join("uploads/issues", filename);
+      const absolutePath = path.join(__dirname, "../../../../", relativePath);
+
+      // Ensure directory exists
+      await fs.promises.mkdir(path.dirname(absolutePath), {
+        recursive: true,
       });
 
-      let issueFile: any;
-
-      // Save file record **only if image exists**
-      if (relativePath) {
-        issueFile = await this.prisma.issueFile.create({
-          data: {
-            issueId: newIssue.id,
-            filePath: relativePath.replace(/\\/g, "/"),
-          },
-        });
-        this.logger.log("Issue file is saved!");
-      }
-
-      newIssue["file"] = issueFile;
-
-      this.logger.log(`Issue created successfully: ${newIssue.id}`);
-      return { message: "Issue created successfully", data: newIssue };
-    } catch (error) {
-      this.logger.error("Failed to create issue", error);
-      throw error;
+      // Write the file asynchronously
+      await fs.promises.writeFile(absolutePath, base64Data, "base64");
     }
+
+    // If dryRun is true → don’t save to DB, just return
+    if (dryRun) {
+      const previewId = Date.now(); // unique timestamp ID
+      return {
+        message: "Dry run successful",
+        data: {
+          id: previewId,
+          title: data.title,
+          description: data.description,
+          filePath: relativePath ? relativePath.replace(/\\/g, "/") : null,
+        },
+      };
+    }
+
+    // Create issue in DB
+    let newIssue = await this.prisma.issue.create({
+      data: {
+        title: data.title,
+        description: data.description,
+        status: data.status ? data.status.toUpperCase() : "ACTIVE",
+        startDate: data.startDate ? new Date(data.startDate) : null,
+        endDate: data.endDate ? new Date(data.endDate) : null,
+        projectId: data.projectId,
+        userId: data.userId,
+      },
+    });
+
+    let issueFile: any;
+
+    // Save file record only if image exists
+    if (relativePath) {
+      issueFile = await this.prisma.issueFile.create({
+        data: {
+          issueId: newIssue.id,
+          filePath: relativePath.replace(/\\/g, "/"),
+        },
+      });
+      this.logger.log("Issue file is saved!");
+    }
+
+    newIssue["file"] = issueFile;
+
+    this.logger.log(`Issue created successfully: ${newIssue.id}`);
+    return { message: "Issue created successfully", data: newIssue };
+  } catch (error) {
+    this.logger.error("Failed to create issue", error);
+    throw error;
   }
+}
+
+
+  // async createIssue(data: {
+  //   title: string;
+  //   description: string;
+  //   status: string;
+  //   startDate: string;
+  //   endDate: string;
+  //   projectId: string;
+  //   userId: string;
+  //   image?: string;
+  // }) {
+  //   let relativePath: string | null = null;
+
+  //   try {
+  //     if (data.image) {
+  //       // Validate Base64 format
+  //       const match = data.image.match(/^data:(image\/[a-zA-Z]+);base64,/);
+  //       if (!match) {
+  //         throw new Error("Invalid Base64 image string");
+  //       }
+
+  //       const fileType = match[1].split("/")[1]; // Extract file extension (png, jpg, etc.)
+  //       const base64Data = data.image.replace(
+  //         /^data:image\/[a-zA-Z]+;base64,/,
+  //         "",
+  //       );
+
+  //       // Generate a unique filename
+  //       const filename = `issue-${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileType}`;
+
+  //       // Define relative and absolute paths
+  //       relativePath = path.join("uploads/issues", filename);
+  //       const absolutePath = path.join(__dirname, "../../../../", relativePath);
+
+  //       // Ensure directory exists
+  //       await fs.promises.mkdir(path.dirname(absolutePath), {
+  //         recursive: true,
+  //       });
+
+  //       // Write the file asynchronously
+  //       await fs.promises.writeFile(absolutePath, base64Data, "base64");
+  //     }
+
+  //     // Create issue without worrying about image
+  //     let newIssue = await this.prisma.issue.create({
+  //       data: {
+  //         title: data.title,
+  //         description: data.description,
+  //         status: data.status ? data.status.toUpperCase() : "ACTIVE",
+  //         startDate: data.startDate ? new Date(data.startDate) : null,
+  //         endDate: data.endDate ? new Date(data.endDate) : null,
+  //         projectId: data.projectId,
+  //         userId: data.userId,
+  //       },
+  //     });
+
+  //     let issueFile: any;
+
+  //     // Save file record **only if image exists**
+  //     if (relativePath) {
+  //       issueFile = await this.prisma.issueFile.create({
+  //         data: {
+  //           issueId: newIssue.id,
+  //           filePath: relativePath.replace(/\\/g, "/"),
+  //         },
+  //       });
+  //       this.logger.log("Issue file is saved!");
+  //     }
+
+  //     newIssue["file"] = issueFile;
+
+  //     this.logger.log(`Issue created successfully: ${newIssue.id}`);
+  //     return { message: "Issue created successfully", data: newIssue };
+  //   } catch (error) {
+  //     this.logger.error("Failed to create issue", error);
+  //     throw error;
+  //   }
+  // }
 
   async updateIssue(
     issueId: string,

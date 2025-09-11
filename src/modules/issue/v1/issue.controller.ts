@@ -32,9 +32,11 @@ export class IssueController {
       projectId: string;
       userId: string;
       image?: string;
+      dryRun?: boolean 
     },
   ) {
-    return await this.issueService.createIssue(data);
+    const dryRun = data.dryRun ? true : false;
+    return await this.issueService.createIssue(data, dryRun);
   }
 
   @UseGuards(AuthGuard)
