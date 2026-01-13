@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException, InternalServerErrorException } from "@nestjs/common";
-import { Company } from "@prisma/client";
+import { Company, Prisma } from "@prisma/client";
 import { PrismaService } from "src/utils/prisma.service";
 
 @Injectable()
@@ -24,29 +24,58 @@ export class CompanyService {
   }
 
   // ✅ Get all companies with logging, pagination & error handling
-  async getAllCompanies(page: number = 1, limit: number = 10) {
-    this.logger.log(`Fetching companies - Page: ${page}, Limit: ${limit}`);
+async getAllCompanies(
+  page: number = 1,
+  limit: number = 10,
+  q?: string
+) {
+  try {
+    // Normalize pagination
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(100, Math.max(1, Number(limit) || 10));
+    const skip = (safePage - 1) * safeLimit;
+    const query = q?.trim();
 
-    try {
-      const totalCompanies = await this.prisma.company.count();
-      const totalPages = Math.ceil(totalCompanies / limit);
-
-      const companies = await this.prisma.company.findMany({
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy: { createdAt: "desc" },
-      });
-
-      this.logger.log(`Retrieved ${companies.length} companies`);
-      return {
-        message: "Companies retrieved successfully!",
-        data: { total: totalCompanies, page, limit, totalPages, companies },
-      };
-    } catch (error) {
-      this.logger.error("Error fetching companies", error );
-      throw new InternalServerErrorException("Failed to fetch companies");
+    // Base where clause (add static filters here if needed, e.g., NOT archived)
+    const whereClause: Prisma.CompanyWhereInput = {};
+    // 🔎 Search across multiple columns (case-insensitive)
+    if (query && query.length > 0) {
+      whereClause.OR = [
+        { name:     { contains: query, mode: 'insensitive' } },
+      ];
     }
+
+    // Fetch list (selected fields only—adjust to your schema)
+    const [totalCompanies, companies] = await this.prisma.$transaction([
+      this.prisma.company.count({ where: whereClause }),
+      this.prisma.company.findMany({
+        where: whereClause,
+        skip,
+        take: safeLimit,
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+
+    const totalPages = totalCompanies ? Math.ceil(totalCompanies / safeLimit) : 0;
+
+    this.logger.log(
+      `Fetched companies: ${companies.length} (filtered total: ${totalCompanies})`
+    );
+
+    return {
+      message: 'Companies retrieved successfully!',
+      data: {
+        pagination: { total: totalCompanies, page: safePage, limit: safeLimit, totalPages },
+        companies,
+        q: query ?? null,
+      },
+    };
+  } catch (error) {
+    this.logger.error('Failed to fetch companies', error);
+    throw new InternalServerErrorException('Failed to fetch companies');
   }
+}
 
   // ✅ Get a single company by ID with logging & error handling
   async getCompanyById(id: string): Promise<Company> {

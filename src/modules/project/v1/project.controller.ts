@@ -107,7 +107,7 @@ export class ProjectController {
 
   @Put(":fileId/update-file")
   @FileUploadInterceptor("./uploads/projects", 10)
-  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN], [PERMISSIONS.FILES.UPLOAD_PROJECT])
   async updateFile(
     @Param("fileId") fileId: string,
     @Body() data: any,
@@ -123,6 +123,7 @@ export class ProjectController {
   @FileUploadInterceptor("./uploads/projects", 10) // Upload up to 10 files to the 'projects' directory
   @RolesAndPermissions(
     [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER],
+    [PERMISSIONS.FILES.UPLOAD_PROJECT]
   )
   async uploadFilesToProject(
     @Req() req: Request,
@@ -134,13 +135,13 @@ export class ProjectController {
   }
 
   @Patch(":projectId/toggle-archive")
-  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN], [PERMISSIONS.PROJECT.CREATE])
   async toggleArchiveProject(@Param("projectId") projectId: string) {
     return await this.projectService.toggleArchiveProject(projectId);
   }
 
   @Get()
-  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER], [PERMISSIONS.PROJECT.READ])
   async getAllProjects(
     @Query("page") page: string,
     @Query("limit") limit: string,
@@ -152,7 +153,7 @@ export class ProjectController {
   }
 
   @Get("list")
-  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER], [PERMISSIONS.PROJECT.READ])
   async getAllProjectList(
     @Query("page") page: string,
     @Query("limit") limit: string,
@@ -164,7 +165,7 @@ export class ProjectController {
   }
 
   @Get("all-issues")
-  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER], [PERMISSIONS.ISSUE.READ])
   async getAllProjectIssues(
     @Query("userId") userId: string,
   ) {
@@ -173,7 +174,7 @@ export class ProjectController {
   }
 
   @Get("archived")
-  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER], [PERMISSIONS.PROJECT.READ])
   async getArchivedProjectList(
     @Query("page") page: string,
     @Query("limit") limit: string,
@@ -185,7 +186,7 @@ export class ProjectController {
   }
 
   @Get(":projectId")
-  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER])
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.WORKER], [PERMISSIONS.PROJECT.READ])
   async getById(@Param("projectId") projectId: string) {
     return this.projectService.getById(projectId);
   }
@@ -281,7 +282,7 @@ export class ProjectController {
   async downloadFile(
     @Res() res: Response,
     @Param("fileId") fileId: string,
-    @Query("type") type: "project" | "issue",
+    @Query("type") type: "project" | "issue" | "order",
   ) {
     // Generate the PDF report
     return await this.projectService.downloadFile(fileId, type);
@@ -325,12 +326,20 @@ export class ProjectController {
   }
 
   @Post('assign-to-users')
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
   async assignProject(@Body() body: {projectId: string; userIds: string[]}) {
     return this.projectService.assignProject(body);
   }
 
   @Post('unassign-to-users')
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
   async removeAssignedUser(@Body() body: {projectId: string; userId: string}) {
     return this.projectService.removeAssignedUser(body);
+  }
+
+  @Delete('delete/file')
+  @RolesAndPermissions([ROLES.SUPER_ADMIN, ROLES.ADMIN])
+  async deleteFile(@Body() body: {fileId: string; type: "project" | "issue" | "order"}) {
+    return this.projectService.deleteFile(body.fileId, body.type);
   }
 }

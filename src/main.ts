@@ -1,8 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { createLogger } from './utils/logger.util';
-import { rootRouteHandler } from './utils/server.util';
 import { setupApp } from './utils/setup.util';
+import { rootRouteHandler } from './utils/server.util';
+
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {

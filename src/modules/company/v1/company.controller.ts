@@ -14,11 +14,11 @@ export class CompanyController {
     }
 
     @Get()
-    async getAllCompanies(@Query("page") page: string, @Query("limit") limit: string) { 
+    async getAllCompanies(@Query("page") page: string, @Query("limit") limit: string, @Query("q")  q: string) { 
         
         const pageNumber = page ? parseInt(page) : 1;
         const limitNumber = limit ? parseInt(limit) : 10;
-        return this.companyService.getAllCompanies(pageNumber, limitNumber);
+        return this.companyService.getAllCompanies(pageNumber, limitNumber, q);
     }
 
     @Get(":id")

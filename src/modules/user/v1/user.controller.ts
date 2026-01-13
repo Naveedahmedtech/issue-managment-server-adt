@@ -14,23 +14,31 @@ import {
 import { Request, Response } from "express";
 import { UserService } from "./user.service";
 import { AuthGuard } from "src/guards/auth.guard";
+import { RolesAndPermissions } from "src/utils/roleAndPermission.decorator";
+import { ROLES } from "src/constants/roles-permissions.constants";
 
 @Controller({ path: "user", version: "1" })
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
-
   // @UseGuards(AuthGuard)
   @Get()
+  @RolesAndPermissions([ROLES.SUPER_ADMIN])
   async getAllUsers(
     @Query("page") page: string,
     @Query("limit") limit: string,
     @Query("roleName") roleName: string,
+    @Query("q") q: string,
     // @Req() req: Request
   ) {
     const pageNumber = parseInt(page, 10) || 1;
     const limitNumber = parseInt(limit, 10) || 10;
-    return await this.userService.getAllUsers(pageNumber, limitNumber, roleName);
+    return await this.userService.getAllUsers(
+      pageNumber,
+      limitNumber,
+      roleName,
+      q
+    );
   }
 
   @Get("azure/login")
@@ -58,11 +66,13 @@ export class UserController {
   }
 
   @Put("azure/:id")
+  @RolesAndPermissions([ROLES.SUPER_ADMIN])
   async updateUser(@Param("id") id: string, @Body() body: any) {
     return await this.userService.updateUser(id, body);
   }
 
   @Delete("azure/:id")
+  @RolesAndPermissions([ROLES.SUPER_ADMIN])
   async deleteUser(@Param("id") id: string) {
     return await this.userService.deleteUser(id);
   }

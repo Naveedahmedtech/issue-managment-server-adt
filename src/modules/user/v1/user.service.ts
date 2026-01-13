@@ -188,6 +188,7 @@ export class UserService {
 
       this.logger.log(`Azure AD user with ID ${azureId} deleted successfully.`);
     } catch (error) {
+      console.log(error.response?.data);
       this.logger.error(
         `Failed to delete Azure AD user with ID: ${azureId}`,
         error.response?.data || error,
@@ -430,7 +431,10 @@ export class UserService {
         throw new NotFoundException(`User with ID ${userId} not found.`);
       }
 
-      // Delete the user from Azure AD
+      // Delete the user from Azure AD -- Because
+      /* 
+      createUser() uses inviteExternalUser() and then stores azureUser.id as azureId. For invitation responses, id is the invitation id, not the directory user id. The actual AAD user id is in response.data.invitedUser.id. That mismatch will make DELETE /users/{azureId} return Request_ResourceNotFound.
+      */
       // await this.deleteAzureUser(user.azureId);
 
       // Soft delete the user by updating the `deleted_at` and `is_deleted` fields
@@ -546,38 +550,48 @@ export class UserService {
   //   }
   // }
 
-  async getAllUsers(page: number = 1, limit: number = 20, roleName?: string) {
+  async getAllUsers(
+    page: number = 1,
+    limit: number = 20,
+    roleName?: string,
+    q?: string,
+  ) {
     try {
       const skip = (page - 1) * limit;
+      const query = q?.trim();
 
-      // Build the where clause conditionally based on roleName and excluding specific emails and role SUPER_ADMIN
+      // Base where clause (exclude SUPER_ADMIN)
       const whereClause: any = {
-        // NOT: [
-        //   { email: "jonas@viewsoft.com" },
-        //   { email: "malik.wahhab@aridiantechnologies.co" },
-        //   { email: "super_admin@viewsoftweb.onmicrosoft.com" },
-        // ],
         role: {
-          NOT: {
-            name: ROLES.SUPER_ADMIN // Exclude users with the role SUPER_ADMIN
-          }
-        }
+          NOT: { name: ROLES.SUPER_ADMIN },
+        },
       };
 
+      // Role filter (keeps NOT condition)
       if (roleName) {
         whereClause.role = {
-          ...whereClause.role, // Preserve existing NOT condition
-          name: roleName, // Filter by role if provided
+          ...whereClause.role,
+          name: roleName,
         };
       }
 
-      console.log(whereClause)
+      // 🔎 Search filter (case-insensitive)
+      // Matches email, name, displayName, and role name (useful if roleName isn't provided)
+      if (query && query.length > 0) {
+        whereClause.OR = [
+          { email: { contains: query, mode: "insensitive" } },
+          { name: { contains: query, mode: "insensitive" } },
+          { displayName: { contains: query, mode: "insensitive" } },
+          { role: { name: { contains: query, mode: "insensitive" } } },
+        ];
+      }
 
-      // Fetch users, optionally filtering by role name
+      // Fetch users
       const users = await this.prisma.user.findMany({
         skip,
         take: limit,
         where: whereClause,
+        orderBy: { createdAt: "desc" },
         select: {
           id: true,
           email: true,
@@ -591,41 +605,28 @@ export class UserService {
               name: true,
               permissions: {
                 select: {
-                  permission: {
-                    select: {
-                      action: true,
-                      description: true,
-                    },
-                  },
+                  permission: { select: { action: true, description: true } },
                 },
               },
             },
           },
           userPermissions: {
             select: {
-              permission: {
-                select: {
-                  action: true,
-                  description: true,
-                },
-              },
+              permission: { select: { action: true, description: true } },
             },
           },
         },
       });
 
-      // Count total users, applying the same role name filter and exclusion rule
-      const totalUsers = await this.prisma.user.count({
-        where: whereClause,
-      });
+      // Count (same filters)
+      const totalUsers = await this.prisma.user.count({ where: whereClause });
 
-      // Format the users' data
+      // Format
       const formattedUsers = users.map((user) => {
         const rolePermissions =
           user.role?.permissions.map((p) => p.permission.action) || [];
         const userPermissions =
           user.userPermissions.map((p) => p.permission.action) || [];
-
         return {
           id: user.id,
           email: user.email,
@@ -644,11 +645,7 @@ export class UserService {
       return {
         message: "Users fetched successfully",
         data: {
-          pagination: {
-            total: totalUsers,
-            page,
-            limit,
-          },
+          pagination: { total: totalUsers, page, limit },
           users: formattedUsers,
         },
       };
@@ -693,7 +690,7 @@ export class UserService {
       const result = await this.msalClient.acquireTokenByCode({
         code,
         redirectUri,
-        scopes: ["openid", "profile", "email"],
+        scopes: ["user.read"],
       });
 
       if (!result || !result.accessToken) {
@@ -716,9 +713,11 @@ export class UserService {
         // Assign role based on predefined admin emails
         if (
           userData.email === "johannes@assemble-it.no" ||
+          userData.email === "jonas@rasterex.com" ||
           userData.email === "malik.wahhab@aridiantechnologies.co" ||
           userData.email === "super_admin@viewsoftweb.onmicrosoft.com" ||
-            userData.email === "technaveedahmed@outlook.com"
+          userData.email === "testadt@viewsoftweb.onmicrosoft.com" ||
+          userData.email === "technaveedahmed@outlook.com"
         ) {
           role = await this.prisma.role.findUnique({
             where: { name: ROLES.SUPER_ADMIN },
@@ -753,7 +752,7 @@ export class UserService {
           }
 
           this.logger.log(
-              `New user created with role "${role.name}": ${user.email}`,
+            `New user created with role "${role.name}": ${user.email}`,
           );
         } else {
           // Redirect to the frontend
@@ -764,7 +763,6 @@ export class UserService {
             },
           };
         }
-
       } else {
         this.logger.log(`Existing user authenticated: ${user.email}`);
       }
@@ -793,7 +791,7 @@ export class UserService {
       return {
         message: "REDIRECT_TO_APPLICATION",
         data: {
-          redirectURI: process.env.FRONTEND_URL,
+          redirectURI: process.env.FRONTEND_URL + "/projects-dashboard",
         },
       };
     } catch (error) {

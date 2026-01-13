@@ -16,7 +16,7 @@ export class AuthGuard implements CanActivate {
     async canActivate(context: ExecutionContext): Promise<boolean> {
         const request = context.switchToHttp().getRequest<Request>();
         try {
-            // const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZDllNGNjOC1lMzlmLTQ1ZDYtODE3Yy1hZTdlZmVlMTViZGUiLCJlbWFpbCI6InN1cGVyX2FkbWluQHZpZXdzb2Z0d2ViLm9ubWljcm9zb2Z0LmNvbSIsIm5hbWUiOiJTdXBlciBBZG1pbiIsImlhdCI6MTc0ODU4NDcyMSwiZXhwIjoxNzQ5MTg5NTIxfQ.C3lAc1Zv7_AIDZrU2ziAMWsQI9q1IVrmxEw65OU_yH8'
+            // const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZDllNGNjOC1lMzlmLTQ1ZDYtODE3Yy1hZTdlZmVlMTViZGUiLCJlbWFpbCI6InN1cGVyX2FkbWluQHZpZXdzb2Z0d2ViLm9ubWljcm9zb2Z0LmNvbSIsIm5hbWUiOiJTdXBlciBBZG1pbiIsImlhdCI6MTc1NTc1NjU1MywiZXhwIjoxNzU2MzYxMzUzfQ.el5zlMSW5AoIIn3tqIVxmgNv8SZhfoX6wJi65AJu1wM'
             const token = this.extractTokenFromCookie(request);
             if (!token) {
                 throw new UnauthorizedException('No token found');
