@@ -12,6 +12,12 @@ process.env.FRONTEND_URL,
 process.env.ANGULAR_URL,
 "http://192.168.18.64:5173",
 "http://192.168.18.64:4200",
+"https://app.viewsoft.com",
+"https://modules.issue.viewsoft.com",
+"https://issue.viewsoft.com",
+"https://assemble-angular.viewsoft.io",
+"https://assemble.viewsoft.io"
+
     ],
     credentials: true,
   });
